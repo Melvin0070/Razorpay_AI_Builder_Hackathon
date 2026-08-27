@@ -57,17 +57,28 @@ remains the row-level match.
 
 ## Constraints
 
-- Solo builder, ~3–4 weeks; 5-minute pitch video. Submission deadline date:
-  **[FILL: exact date — day-1 compliance check below]**.
-- **Week-1 day-1 compliance checks (blocking, ~1 hour), with pre-committed
-  branches:** record the exact submission deadline and rubric URL (if the
-  deadline gives < 3 weeks → start at descope rung 4, Amazon-only, and collapse
-  weeks 2–3); determine whether Razorpay product/API usage is mandatory (if yes
-  → pull rung 1 immediately to pay for it; it becomes week-2 scope); determine
-  whether an LLM/AI component is mandatory for Track 04 (if yes → rung 3 moves
-  below rung 4 in the ladder); determine whether a hosted demo is required
-  (default: locally-runnable only, `make demo`); attempt the login-walled
-  policy pages and Flipkart Seller Hub sample settlement sheets; check the
+- Solo builder; 5-minute pitch video. **Application deadline: 5 September 2026**
+  (razorpay.com/buildathon; corroborated by third-party coverage). The build /
+  pitch / panel window is announced post-application to shortlisted applicants —
+  sources conflict on whether the project ships with the application or after
+  shortlisting, so treat the build window as potentially short and front-load
+  week 1. **Action zero: apply (pick Track 04) before 5 Sep — confirm the real
+  submission date inside the application flow.** Eligibility per the official
+  page: currently enrolled students only.
+- **Day-1 compliance checks — resolved 2026-08-27 from razorpay.com/buildathon:**
+  Track 04 brief verbatim: *"Build an agent that closes one finance-ops loop
+  across a 50+ record batch of **synthetic data**, reporting its match rate and
+  the exceptions it could not resolve."* Judging verbatim: *"Throughput plus
+  measured accuracy plus an honest exception list. One cherry-picked match
+  proves nothing."* → synthetic-first is the track's own format; the
+  real-seller run is pure differentiator, not compliance. Razorpay APIs:
+  mandatory only for Track 1, **not Track 04** → the Razorpay integration is
+  optional polish, cut by default (OQ5 closed; rung-1-to-pay-for-it branch
+  moot). AI component: the event requires "meaningful use of AI" → descope
+  rung 3 (drop the LLM) is effectively unavailable and sits below rung 4.
+  Hosted demo: not required → D16 locally-runnable confirmed.
+- **Remaining day-1 checks (still open):** attempt the login-walled policy
+  pages and Flipkart Seller Hub sample settlement sheets; check the
   marketplace returns-report column lists for a disposition/restock signal
   (detector 4) and confirm whether catalog dims exist as an export (detector 3).
 - Stack (default, changeable before week 1): Python 3.12 + uv, stdlib-first;
@@ -89,12 +100,15 @@ remains the row-level match.
    `amount-description` / `amount`), not wide fee-per-column. Consequence: week 1
    is parsing, not archaeology; the real-seller ask retargets from "send me your
    file" to "send me one weird row that broke your spreadsheet."
-2. **P2 — On Flipkart, detection ≠ claimability.** SPF eligibility appears to
-   gate on active VMS packing video; a claim can be validly detected yet
-   unwinnable because the deciding evidence is a video only the seller has.
-   *Secondary-source lead (WareIQ, TrackVid); verification fallback in Resolved
-   Decisions D14.* Consequence: the evidence model distinguishes
-   report-derivable from seller-suppliable evidence.
+2. **P2 — On Flipkart, detection ≠ claimability.** SPF eligibility gates on
+   VMS: per 2026 secondary coverage (WareIQ, TrackVid), a seller without a
+   compliant Video Management System is ineligible for SPF *regardless of
+   evidence quality*; SPF covers transit damage/loss, return discrepancies,
+   and customer fraud, with ~14-day windows for damaged/incorrect returns and
+   ~120 days for missing items. Strengthened 2026-08-27 by multiple concurring
+   sources; still `verified: false` until read on Seller Hub itself (D14).
+   Consequence: the evidence model distinguishes report-derivable from
+   seller-suppliable evidence, and VMS-less sellers hit precedence step 4.
 3. **P3 — Encoded eligibility rules beat a third marketplace.** Example: SAFE-T
    excludes seller-issued refunds and A-to-Z transactions, so a naive
    refund-without-reversal detector false-positives on exactly the non-claimable
@@ -498,9 +512,11 @@ is a judged artifact. Post-buildathon distribution is out of scope for this doc.
 
 ## The Assignment
 
-Before writing any code this week, send this message to three sellers you can
-reach (seller Telegram/Discord groups, r/IndianEcommerce, any acquaintance who
-sells on Amazon/Flipkart):
+**Step zero, before anything else: apply at razorpay.com/buildathon (Track 04)
+before 5 September, and record the actual project-submission date the
+application flow reveals.** Then, before writing any code this week, send this
+message to three sellers you can reach (seller Telegram/Discord groups,
+r/IndianEcommerce, any acquaintance who sells on Amazon/Flipkart):
 
 > "I'm building a tool that finds money marketplaces owe sellers. Can you send
 > me a screenshot of one settlement row that never added up for you — names
