@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LeakProof — exception review wireframe</title>
+<!-- Intentionally rough wireframe. System fonts, grayscale, thin borders.
+     Decision: the evidence-completeness status is the FIRST-CLASS column, not the
+     rupee amount — approach B's whole claim is collectable-vs-identified. -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; background: #fafafa; color: #222; padding: 16px; width: 1280px; }
+  .frame { border: 1px solid #bbb; background: #fff; }
+  header { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid #ccc; }
+  header h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; }
+  header .batch { font-size: 11px; color: #666; font-family: "SF Mono", Menlo, monospace; }
+  /* Metrics strip: the honest tiles. "Unresolved" gets equal billing — that IS the pitch. */
+  .metrics { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid #ccc; }
+  .tile { padding: 10px 14px; border-right: 1px solid #e2e2e2; }
+  .tile:last-child { border-right: none; }
+  .tile .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #777; }
+  .tile .v { font-size: 19px; font-weight: 700; font-family: "SF Mono", Menlo, monospace; margin-top: 2px; }
+  .tile .s { font-size: 10px; color: #888; margin-top: 2px; }
+  .tile.warn { background: repeating-linear-gradient(-45deg, #fff, #fff 6px, #f2f2f2 6px, #f2f2f2 7px); }
+  .cols { display: flex; }
+  /* Exception table */
+  .list { flex: 1.55; border-right: 1px solid #ccc; }
+  .list .bar { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #ddd; font-size: 11px; color: #555; }
+  .chipf { border: 1px solid #bbb; border-radius: 10px; padding: 1px 8px; background: #f5f5f5; }
+  .chipf.on { background: #333; color: #fff; border-color: #333; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #777; padding: 6px 10px; border-bottom: 1px solid #ccc; background: #f7f7f7; }
+  td { padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr.sel td { background: #f0f0f0; }
+  .mono { font-family: "SF Mono", Menlo, monospace; font-size: 11px; }
+  .amt { text-align: right; font-family: "SF Mono", Menlo, monospace; font-weight: 600; }
+  .st { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: .4px; padding: 2px 7px; border-radius: 2px; border: 1px solid #333; }
+  .st.ready { background: #333; color: #fff; }
+  .st.blocked { background: #fff; color: #333; border-style: dashed; }
+  .st.noclaim { background: #eee; color: #888; border-color: #aaa; text-decoration: line-through; }
+  .ddl { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: #444; }
+  .ddl b { color: #000; }
+  /* Detail pane */
+  .detail { flex: 1; padding: 12px 14px; font-size: 12px; }
+  .detail h2 { font-size: 12px; margin-bottom: 2px; }
+  .detail .sub { font-size: 10.5px; color: #777; margin-bottom: 10px; }
+  .sec { border: 1px solid #ddd; margin-bottom: 10px; }
+  .sec .h { font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: #777; padding: 4px 8px; background: #f7f7f7; border-bottom: 1px solid #ddd; }
+  .sec .b { padding: 8px; }
+  .row-cite { font-family: "SF Mono", Menlo, monospace; font-size: 10px; color: #444; padding: 2px 0; }
+  .diff { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; }
+  .diff .neg { text-decoration: line-through; color: #999; }
+  .evreq { font-size: 10.5px; padding: 2px 0; }
+  .evreq .ok::before { content: "☑ "; }
+  .evreq .miss::before { content: "☐ "; }
+  .evreq .miss { font-weight: 700; }
+  .claim { font-size: 10.5px; color: #555; background: #fafafa; border: 1px dashed #ccc; padding: 6px; }
+  .gate { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  .btn { border: 1.5px solid #222; padding: 6px 14px; font-size: 11px; font-weight: 700; background: #fff; }
+  .btn.pri { background: #222; color: #fff; }
+  .gate .note { font-size: 9.5px; color: #888; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <header>
+    <h1>LEAKPROOF · Batch #2026-08-W3</h1>
+    <div class="batch">152 orders · Amazon + Flipkart · ingested 27 Aug, 14:02 · audit log #a41c…</div>
+  </header>
+
+  <!-- Honest metrics: identified vs claim-ready split is the product's thesis -->
+  <div class="metrics">
+    <div class="tile"><div class="k">Match rate</div><div class="v">94.2%</div><div class="s">143/152 fully reconciled</div></div>
+    <div class="tile"><div class="k">Identified</div><div class="v">₹47,230</div><div class="s">27 exceptions</div></div>
+    <div class="tile"><div class="k">Claim-ready</div><div class="v">₹19,400</div><div class="s">11 claims, evidence complete</div></div>
+    <div class="tile warn"><div class="k">Blocked on evidence</div><div class="v">₹21,600</div><div class="s">9 — seller must supply</div></div>
+    <div class="tile warn"><div class="k">Unresolved</div><div class="v">7</div><div class="s">4 unexplainable · 3 quarantined rows</div></div>
+  </div>
+
+  <div class="cols">
+    <div class="list">
+      <div class="bar">
+        <span class="chipf on">All 27</span><span class="chipf">Claim-ready 11</span><span class="chipf">Blocked 9</span><span class="chipf">Not claimable 3</span><span class="chipf">Unexplainable 4</span>
+        <span style="margin-left:auto">sort: deadline ↑</span>
+      </div>
+      <table>
+        <tr><th>Order</th><th>MP</th><th>Type</th><th style="text-align:right">₹</th><th>Evidence status</th><th>File by</th></tr>
+        <tr class="sel">
+          <td class="mono">171-882…14</td><td>AMZ</td><td>Commission overcharge</td><td class="amt">1,240</td>
+          <td><span class="st ready">CLAIM-READY</span></td><td class="ddl"><b>6d</b> · 02 Sep</td>
+        </tr>
+        <tr>
+          <td class="mono">OD3319…77</td><td>FLP</td><td>Return never received</td><td class="amt">3,890</td>
+          <td><span class="st blocked">BLOCKED · NEEDS PACKING VIDEO</span></td><td class="ddl"><b>3d</b> · 30 Aug</td>
+        </tr>
+        <tr>
+          <td class="mono">403-115…02</td><td>AMZ</td><td>Refund, fee not reversed</td><td class="amt">610</td>
+          <td><span class="st noclaim">NOT CLAIMABLE · A-TO-Z</span></td><td class="ddl">—</td>
+        </tr>
+        <tr>
+          <td class="mono">171-004…91</td><td>AMZ</td><td>Weight overcharge (0.5→2kg)</td><td class="amt">2,140</td>
+          <td><span class="st ready">CLAIM-READY</span></td><td class="ddl"><b>11d</b> · 07 Sep</td>
+        </tr>
+        <tr>
+          <td class="mono">OD3327…40</td><td>FLP</td><td>Unpaid order past cycle</td><td class="amt">4,320</td>
+          <td><span class="st blocked">BLOCKED · AWAITING CYCLE 2</span></td><td class="ddl">watch</td>
+        </tr>
+        <tr>
+          <td class="mono">171-436…88</td><td>AMZ</td><td>TCS mismatch vs GSTR</td><td class="amt">380</td>
+          <td><span class="st blocked">BLOCKED · CA REVIEW</span></td><td class="ddl">Q2 filing</td>
+        </tr>
+        <tr>
+          <td class="mono">OD3312…19</td><td>FLP</td><td>Unexplainable deduction</td><td class="amt">1,975</td>
+          <td><span class="st blocked">UNEXPLAINABLE · 62% CONF</span></td><td class="ddl">—</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Detail pane: citation → recomputation → evidence checklist → gated draft -->
+    <div class="detail">
+      <h2>Commission overcharge · ₹1,240</h2>
+      <div class="sub">Order 171-882…14 · Amazon · SKU KTCH-PAN-28 · Kitchen &gt; Cookware</div>
+
+      <div class="sec"><div class="h">Source rows (3)</div><div class="b">
+        <div class="row-cite">settlement_2026-08-21.txt : row 1,204 · Commission −487.50</div>
+        <div class="row-cite">orders_aug.csv : row 88 · sale 3,250.00</div>
+        <div class="row-cite">ratecard v2026-03 : Cookware = 12% ≤₹3,500</div>
+      </div></div>
+
+      <div class="sec"><div class="h">Recomputation</div><div class="b diff">
+        charged&nbsp;&nbsp;15.0% → <span class="neg">₹487.50</span><br>
+        rate card 12.0% → ₹390.00<br>
+        <b>overcharge&nbsp;&nbsp;&nbsp;&nbsp;₹97.50 × 12 units ≈ ₹1,240 (incl. GST on fee)</b>
+      </div></div>
+
+      <div class="sec"><div class="h">Evidence — SAFE-T requires</div><div class="b">
+        <div class="evreq"><span class="ok">Order + settlement row refs</span></div>
+        <div class="evreq"><span class="ok">Rate card citation, dated</span></div>
+        <div class="evreq"><span class="ok">Amazon-initiated refund check: n/a</span></div>
+        <div class="evreq"><span class="ok">Within 30-day window (refund dt 24 Aug)</span></div>
+      </div></div>
+
+      <div class="sec"><div class="h">Drafted claim (agent-written, not filed)</div><div class="b claim">
+        "Commission charged at 15% against published Cookware rate of 12% (rate card v2026-03).
+        Recomputation attached; 12 affected units on settlement #S-88231. Requesting ₹1,240 adjustment…"
+      </div></div>
+
+      <div class="gate">
+        <div class="btn pri">APPROVE &amp; QUEUE</div>
+        <div class="btn">REJECT</div>
+        <div class="note">nothing files without you · logged to audit trail</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
