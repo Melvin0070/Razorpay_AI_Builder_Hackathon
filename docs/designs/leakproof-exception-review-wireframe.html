@@ -2,155 +2,524 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>LeakProof — exception review wireframe</title>
-<!-- Intentionally rough wireframe. System fonts, grayscale, thin borders.
-     Decision: the evidence-completeness status is the FIRST-CLASS column, not the
-     rupee amount — approach B's whole claim is collectable-vs-identified. -->
+<title>LeakProof — exception review wireframe (rev 2026-09-04)</title>
+<!--
+  REVISED 2026-09-04 by /plan-design-review. Supersedes the 2026-08-27 wireframe
+  (commit 6fff28d), which described a product that no longer exists: two
+  marketplaces, detectors 3 and 4, a confidence score on UNEXPLAINED, a five-tile
+  metrics strip, and a two-button gate.
+
+  Decisions this file encodes:
+    2A  Metrics strip is 4 tiers, not N tiles. The additivity identity
+        (₹ identified = claim-ready + blocked + not-claimable) is the FORM:
+        a segmented bar whose widths are proportions. Blocked is the widest
+        segment because it is the largest number — "equal visual weight to
+        the wins" falls out of the data instead of being a styling rule.
+    3A  Four states, four FILL PATTERNS, all at full contrast. No strikethrough,
+        no fading. Same four fills in the chips and in the bar segments.
+    4A  One primary action per state. UNEXPLAINED gets FLAG FOR FOLLOW-UP
+        (no mechanism → no claim pack). Override labels name the blocker KIND
+        (bounded set of 4) so variable-length blocker strings cannot break layout.
+    5A  Static export shows the RESULT, not a dead button: one pre-approved
+        exception renders its claim pack inline. See the second frame below.
+    6A  CSS variables + forced tabular numerals, so rupee columns align on
+        whatever font the viewer's OS supplies.
+
+  SUBTLE, DO NOT "FIX": the class-7 TCS row has state BLOCKED but its ₹ goes to
+  the tax-review line, not the blocked line. The ₹ line is a function of
+  (class, state), not of state alone. See design doc, "Rupee partition".
+-->
 <style>
+  :root {
+    --ink:       #1a1a1a;   /* primary text, solid fills            */
+    --ink-2:     #444;      /* secondary text                       */
+    --ink-3:     #595959;   /* tertiary — 7.0:1 on white (was #888) */
+    --ink-label: #666;      /* uppercase labels — 5.3:1 on --bg-2   */
+    --rule:      #ccc;      /* structural borders                   */
+    --rule-2:    #e4e4e4;   /* hairlines between rows               */
+    --bg:        #fff;
+    --bg-2:      #f7f7f7;   /* header rows, section headers         */
+    --bg-3:      #fafafa;   /* page ground, quoted claim text       */
+    --sel:       #f0f0f0;   /* selected row                         */
+    /* Two hatch densities. The coarse one reads at the 22px bar; inside a 12px
+       chip it degrades to two faint diagonals and BLOCKED becomes visually
+       identical to NOT-CLAIMABLE. Verified 2026-09-04 by rendering. Small
+       elements get --hatch-fine. */
+    --hatch:      repeating-linear-gradient(-45deg,
+                    var(--bg) 0 6px, #e0e0e0 6px 7.5px);
+    --hatch-fine: repeating-linear-gradient(-45deg,
+                    var(--bg) 0 2.5px, #c4c4c4 2.5px 4px);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; background: #fafafa; color: #222; padding: 16px; width: 1280px; }
-  .frame { border: 1px solid #bbb; background: #fff; }
-  header { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 16px; border-bottom: 1px solid #ccc; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+         background: var(--bg-3); color: var(--ink); padding: 16px; width: 1280px; }
+  /* Every numeral in this product sits in a column that must align.
+     tnum forces tabular figures regardless of which font the OS supplies. */
+  .amt, .mono, .v, .ddl, .num {
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+  .frame { border: 1px solid var(--rule); background: var(--bg); margin-bottom: 22px; }
+  header { display: flex; justify-content: space-between; align-items: baseline;
+           padding: 12px 16px; border-bottom: 1px solid var(--rule); }
   header h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; }
-  header .batch { font-size: 11px; color: #666; font-family: "SF Mono", Menlo, monospace; }
-  /* Metrics strip: the honest tiles. "Unresolved" gets equal billing — that IS the pitch. */
-  .metrics { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid #ccc; }
-  .tile { padding: 10px 14px; border-right: 1px solid #e2e2e2; }
-  .tile:last-child { border-right: none; }
-  .tile .k { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #777; }
-  .tile .v { font-size: 19px; font-weight: 700; font-family: "SF Mono", Menlo, monospace; margin-top: 2px; }
-  .tile .s { font-size: 10px; color: #888; margin-top: 2px; }
-  .tile.warn { background: repeating-linear-gradient(-45deg, #fff, #fff 6px, #f2f2f2 6px, #f2f2f2 7px); }
+  header .batch { font-size: 11px; color: var(--ink-3); }
+
+  /* ── TIER 1-4 metrics ─────────────────────────────────────────────── */
+  .metrics { padding: 14px 16px 12px; border-bottom: 1px solid var(--rule); }
+  .t1 { display: flex; align-items: baseline; justify-content: space-between; }
+  .t1 .k { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-label); }
+  .t1 .v { font-size: 30px; font-weight: 700; letter-spacing: -.5px; }
+
+  /* TIER 2 — the additivity bar. Widths ARE the proportions. */
+  .bar { display: flex; height: 22px; margin: 8px 0 6px; border: 1px solid var(--ink); }
+  .bar span { display: block; }
+  .bar .s-ready  { background: var(--ink); }                                   /* solid   */
+  .bar .s-block  { background: var(--hatch); border-left: 1px solid var(--ink); } /* hatched */
+  .bar .s-noclaim{ background: var(--bg);  border-left: 1px solid var(--ink); } /* outline */
+  .legend { display: flex; gap: 26px; font-size: 12px; }
+  .legend .lab { color: var(--ink-label); text-transform: uppercase;
+                 font-size: 10px; letter-spacing: .6px; }
+  .legend .amt { font-weight: 700; font-size: 15px; }
+  .legend .sub { font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
+  /* TIER 3 — disjoint lines. Subordinate, separated by a rule. */
+  .t3 { display: flex; gap: 26px; margin-top: 11px; padding-top: 9px;
+        border-top: 1px solid var(--rule-2); font-size: 12px; }
+  .t3 .lab { color: var(--ink-label); text-transform: uppercase;
+             font-size: 10px; letter-spacing: .6px; }
+  .t3 .amt { font-weight: 700; }
+
+  /* TIER 4 — provenance. How much of the file did we actually process? */
+  .t4 { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--rule-2);
+        font-size: 11.5px; color: var(--ink-2); display: flex;
+        justify-content: space-between; }
+  .t4 b { color: var(--ink); }
+
   .cols { display: flex; }
-  /* Exception table */
-  .list { flex: 1.55; border-right: 1px solid #ccc; }
-  .list .bar { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #ddd; font-size: 11px; color: #555; }
-  .chipf { border: 1px solid #bbb; border-radius: 10px; padding: 1px 8px; background: #f5f5f5; }
-  .chipf.on { background: #333; color: #fff; border-color: #333; }
-  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #777; padding: 6px 10px; border-bottom: 1px solid #ccc; background: #f7f7f7; }
-  td { padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
-  tr.sel td { background: #f0f0f0; }
-  .mono { font-family: "SF Mono", Menlo, monospace; font-size: 11px; }
-  .amt { text-align: right; font-family: "SF Mono", Menlo, monospace; font-weight: 600; }
-  .st { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: .4px; padding: 2px 7px; border-radius: 2px; border: 1px solid #333; }
-  .st.ready { background: #333; color: #fff; }
-  .st.blocked { background: #fff; color: #333; border-style: dashed; }
-  .st.noclaim { background: #eee; color: #888; border-color: #aaa; text-decoration: line-through; }
-  .ddl { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: #444; }
-  .ddl b { color: #000; }
-  /* Detail pane */
-  .detail { flex: 1; padding: 12px 14px; font-size: 12px; }
-  .detail h2 { font-size: 12px; margin-bottom: 2px; }
-  .detail .sub { font-size: 10.5px; color: #777; margin-bottom: 10px; }
-  .sec { border: 1px solid #ddd; margin-bottom: 10px; }
-  .sec .h { font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: #777; padding: 4px 8px; background: #f7f7f7; border-bottom: 1px solid #ddd; }
-  .sec .b { padding: 8px; }
-  .row-cite { font-family: "SF Mono", Menlo, monospace; font-size: 10px; color: #444; padding: 2px 0; }
-  .diff { font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; }
-  .diff .neg { text-decoration: line-through; color: #999; }
-  .evreq { font-size: 10.5px; padding: 2px 0; }
-  .evreq .ok::before { content: "☑ "; }
-  .evreq .miss::before { content: "☐ "; }
+
+  /* ── Exception queue ──────────────────────────────────────────────── */
+  .list { flex: 1.55; border-right: 1px solid var(--rule); }
+  .list .filters { display: flex; gap: 8px; padding: 9px 12px;
+                   border-bottom: 1px solid var(--rule-2); font-size: 11.5px;
+                   color: var(--ink-2); align-items: center; }
+  .chipf { border: 1px solid var(--rule); border-radius: 10px; padding: 2px 9px; background: var(--bg-2); }
+  .chipf.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+       color: var(--ink-label); padding: 7px 10px;
+       border-bottom: 1px solid var(--rule); background: var(--bg-2); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+  tr.sel td { background: var(--sel); }
+  .amt { text-align: right; font-weight: 600; }
+  .ddl { font-size: 11.5px; color: var(--ink-2); }
+  .ddl b { color: var(--ink); }
+  .grp { font-size: 10px; text-transform: uppercase; letter-spacing: .7px;
+         color: var(--ink-label); background: var(--bg-2); padding: 5px 10px;
+         border-bottom: 1px solid var(--rule-2); }
+
+  /* ── FOUR STATES, FOUR FILLS. All full contrast. No strikethrough. ── */
+  .st { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .3px;
+        padding: 3px 8px; border: 1px solid var(--ink); color: var(--ink); }
+  .st.ready   { background: var(--ink); color: var(--bg); }   /* solid   — act now     */
+  .st.blocked { background: var(--hatch-fine); }              /* hatched — wait        */
+  .st.unexp   { background: var(--bg); border-style: dotted; }/* dotted  — investigate */
+  .st.noclaim { background: var(--bg); }                      /* outline — lost        */
+  .why { display: block; font-size: 11px; color: var(--ink-2); margin-top: 3px; }
+
+  /* ── Detail pane ──────────────────────────────────────────────────── */
+  .detail { flex: 1; padding: 13px 15px; font-size: 12.5px; }
+  .detail h2 { font-size: 13px; margin-bottom: 2px; }
+  .detail .sub { font-size: 11.5px; color: var(--ink-3); margin-bottom: 11px; }
+  .sec { border: 1px solid var(--rule-2); margin-bottom: 10px; }
+  .sec .h { font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+            color: var(--ink-label); padding: 5px 8px; background: var(--bg-2);
+            border-bottom: 1px solid var(--rule-2); }
+  .sec .b { padding: 9px; }
+  .cite { font-size: 11px; color: var(--ink-2); padding: 2px 0;
+          font-family: "SF Mono", Menlo, Consolas, monospace;
+          font-variant-numeric: tabular-nums; }
+  .diff { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px;
+          font-variant-numeric: tabular-nums; }
+  .diff .neg { color: var(--ink-3); }
+  .evreq { font-size: 11.5px; padding: 2px 0; }
+  .evreq .ok::before  { content: "\2611  "; }
+  .evreq .miss::before{ content: "\2610  "; }
   .evreq .miss { font-weight: 700; }
-  .claim { font-size: 10.5px; color: #555; background: #fafafa; border: 1px dashed #ccc; padding: 6px; }
-  .gate { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
-  .btn { border: 1.5px solid #222; padding: 6px 14px; font-size: 11px; font-weight: 700; background: #fff; }
-  .btn.pri { background: #222; color: #fff; }
-  .gate .note { font-size: 9.5px; color: #888; }
+  .unver { font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+           border: 1px dotted var(--ink-2); color: var(--ink-2); padding: 1px 5px;
+           margin-left: 5px; }
+  .claim { font-size: 11.5px; color: var(--ink-2); background: var(--bg-3);
+           border: 1px dashed var(--rule); padding: 8px; }
+
+  /* ── Gate: one primary per state ──────────────────────────────────── */
+  .gate { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--rule); }
+  .btns { display: flex; gap: 8px; align-items: center; }
+  .btn { border: 1.5px solid var(--ink); padding: 7px 15px; font-size: 12px;
+         font-weight: 700; background: var(--bg); color: var(--ink); }
+  .btn.pri  { background: var(--ink); color: var(--bg); }    /* CLAIM-READY only     */
+  .btn.over { background: var(--hatch-fine); }                /* hatched = not a win  */
+  .btn.flag { background: var(--bg); }                        /* outline              */
+  .conseq { font-size: 12px; color: var(--ink-2); margin-top: 8px; line-height: 1.45; }
+  .conseq b { color: var(--ink); }
+
+  /* Static-export variant: the result, not a dead button. */
+  .approved { border: 1px solid var(--ink); margin-top: 11px; }
+  .approved .h { font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+                 background: var(--ink); color: var(--bg); padding: 5px 9px; }
+  .approved .b { padding: 9px; font-size: 11.5px; }
+  .approved .row { display: flex; gap: 10px; padding: 3px 0; }
+  .approved .row .k { color: var(--ink-label); width: 118px; flex: none;
+                      text-transform: uppercase; font-size: 10px; letter-spacing: .5px;
+                      padding-top: 2px; }
+  .staticnote { font-size: 12px; color: var(--ink-2); margin-top: 11px;
+                padding-top: 10px; border-top: 1px solid var(--rule); line-height: 1.5; }
+  .staticnote code { background: var(--bg-2); padding: 1px 5px; border: 1px solid var(--rule-2); }
+  .framelabel { font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+                color: var(--ink-label); margin: 0 0 7px 2px; }
 </style>
 </head>
 <body>
+
+<div class="framelabel">Frame 1 — served (<code>make serve</code>) · the pitch-video path</div>
 <div class="frame">
   <header>
-    <h1>LEAKPROOF · Batch #2026-08-W3</h1>
-    <div class="batch">152 orders · Amazon + Flipkart · ingested 27 Aug, 14:02 · audit log #a41c…</div>
+    <h1>LEAKPROOF · Batch 2026-08-W3</h1>
+    <div class="batch mono">150 orders · Amazon · cycles 21–24 · as_of 2026-08-28 · audit #a41c…</div>
   </header>
 
-  <!-- Honest metrics: identified vs claim-ready split is the product's thesis -->
   <div class="metrics">
-    <div class="tile"><div class="k">Match rate</div><div class="v">94.2%</div><div class="s">143/152 fully reconciled</div></div>
-    <div class="tile"><div class="k">Identified</div><div class="v">₹47,230</div><div class="s">27 exceptions</div></div>
-    <div class="tile"><div class="k">Claim-ready</div><div class="v">₹19,400</div><div class="s">11 claims, evidence complete</div></div>
-    <div class="tile warn"><div class="k">Blocked on evidence</div><div class="v">₹21,600</div><div class="s">9 — seller must supply</div></div>
-    <div class="tile warn"><div class="k">Unresolved</div><div class="v">7</div><div class="s">4 unexplainable · 3 quarantined rows</div></div>
+    <!-- TIER 1 -->
+    <div class="t1">
+      <div class="k">₹ identified</div>
+      <div class="v">₹47,230</div>
+    </div>
+
+    <!-- TIER 2 — widths are proportions: 41.1% / 45.7% / 13.2% -->
+    <div class="bar">
+      <span class="s-ready"   style="width:41.1%"></span>
+      <span class="s-block"   style="width:45.7%"></span>
+      <span class="s-noclaim" style="width:13.2%"></span>
+    </div>
+    <div class="legend">
+      <div>
+        <div class="lab">claim-ready</div>
+        <div class="amt">₹19,400</div><div class="sub">7 claims, evidence complete</div>
+      </div>
+      <div>
+        <div class="lab">blocked</div>
+        <div class="amt">₹21,600</div><div class="sub">7 — named blocker each</div>
+      </div>
+      <div>
+        <div class="lab">not claimable</div>
+        <div class="amt">₹6,230</div>
+        <div class="sub"><b>₹4,100 window expired</b> · ₹2,130 excluded by rule</div>
+      </div>
+    </div>
+
+    <!-- TIER 3 — disjoint from ₹ identified and from each other -->
+    <div class="t3">
+      <div><span class="lab">tax-review</span> <span class="amt">₹380</span> · 1 · CA export</div>
+      <div><span class="lab">unexplained</span> <span class="amt">₹1,975</span> · 2</div>
+      <div><span class="lab">below ₹10</span> <span class="amt">₹212</span> · 18 rows, aggregated</div>
+      <div style="margin-left:auto;color:var(--ink-3)">total discrepancy <span class="num">₹49,797</span></div>
+    </div>
+
+    <!-- TIER 4 — provenance -->
+    <div class="t4">
+      <div>match rate <b class="num">94.0%</b> strict · <b class="num">97.9%</b> adjusted
+           <span style="color:var(--ink-3)">(Δ = 6 unpaid orders, excluded from adjusted)</span></div>
+      <div>9 rows not processed: <b class="num">3</b> quarantined ·
+           <b class="num">4</b> uncovered · <b class="num">2</b> out of window ·
+           <b class="num">0</b> config errors</div>
+    </div>
   </div>
 
   <div class="cols">
     <div class="list">
-      <div class="bar">
-        <span class="chipf on">All 27</span><span class="chipf">Claim-ready 11</span><span class="chipf">Blocked 9</span><span class="chipf">Not claimable 3</span><span class="chipf">Unexplainable 4</span>
-        <span style="margin-left:auto">sort: deadline ↑</span>
+      <div class="filters">
+        <span class="chipf on">All 20</span>
+        <span class="chipf">Claim-ready 7</span>
+        <span class="chipf">Blocked 7</span>
+        <span class="chipf">Unexplained 2</span>
+        <span class="chipf">Not claimable 4</span>
+        <span style="margin-left:auto">grouped by state · deadline ↑ · nulls last · ₹ ↓</span>
       </div>
       <table>
-        <tr><th>Order</th><th>MP</th><th>Type</th><th style="text-align:right">₹</th><th>Evidence status</th><th>File by</th></tr>
+        <tr><th>Order</th><th>Class</th><th style="text-align:right">₹</th>
+            <th>Evidence status</th><th>File by</th></tr>
+
+        <tr><td colspan="5" class="grp">Claim-ready · 7 · ₹19,400</td></tr>
         <tr class="sel">
-          <td class="mono">171-882…14</td><td>AMZ</td><td>Commission overcharge</td><td class="amt">1,240</td>
+          <td class="mono">171-882…14</td><td>1 · Commission overcharge</td><td class="amt">1,240</td>
           <td><span class="st ready">CLAIM-READY</span></td><td class="ddl"><b>6d</b> · 02 Sep</td>
         </tr>
         <tr>
-          <td class="mono">OD3319…77</td><td>FLP</td><td>Return never received</td><td class="amt">3,890</td>
-          <td><span class="st blocked">BLOCKED · NEEDS PACKING VIDEO</span></td><td class="ddl"><b>3d</b> · 30 Aug</td>
-        </tr>
-        <tr>
-          <td class="mono">403-115…02</td><td>AMZ</td><td>Refund, fee not reversed</td><td class="amt">610</td>
-          <td><span class="st noclaim">NOT CLAIMABLE · A-TO-Z</span></td><td class="ddl">—</td>
-        </tr>
-        <tr>
-          <td class="mono">171-004…91</td><td>AMZ</td><td>Weight overcharge (0.5→2kg)</td><td class="amt">2,140</td>
+          <td class="mono">171-004…91</td><td>2 · Closing fee error</td><td class="amt">610</td>
           <td><span class="st ready">CLAIM-READY</span></td><td class="ddl"><b>11d</b> · 07 Sep</td>
         </tr>
+
+        <tr><td colspan="5" class="grp">Blocked · 7 · ₹21,600 <span style="text-transform:none;letter-spacing:0">(+ ₹380 tax-review, reported on its own line)</span></td></tr>
         <tr>
-          <td class="mono">OD3327…40</td><td>FLP</td><td>Unpaid order past cycle</td><td class="amt">4,320</td>
-          <td><span class="st blocked">BLOCKED · AWAITING CYCLE 2</span></td><td class="ddl">watch</td>
+          <td class="mono">171-772…33</td><td>6 · Unpaid order past cycle</td><td class="amt">5,180</td>
+          <td><span class="st blocked">BLOCKED</span>
+              <span class="why">timing — awaiting settlement cycle 2</span></td>
+          <td class="ddl">watch</td>
         </tr>
         <tr>
-          <td class="mono">171-436…88</td><td>AMZ</td><td>TCS mismatch vs GSTR</td><td class="amt">380</td>
-          <td><span class="st blocked">BLOCKED · CA REVIEW</span></td><td class="ddl">Q2 filing</td>
+          <td class="mono">403-115…02</td><td>5 · Refund, fee not reversed</td><td class="amt">4,320</td>
+          <td><span class="st blocked">BLOCKED</span>
+              <span class="why">timing — awaiting settlement cycle 3</span></td>
+          <td class="ddl">watch</td>
         </tr>
         <tr>
-          <td class="mono">OD3312…19</td><td>FLP</td><td>Unexplainable deduction</td><td class="amt">1,975</td>
-          <td><span class="st blocked">UNEXPLAINABLE · 62% CONF</span></td><td class="ddl">—</td>
+          <td class="mono">171-436…88</td><td>7 · TCS mismatch</td><td class="amt">380</td>
+          <td><span class="st blocked">BLOCKED</span>
+              <span class="why">professional-review — CA review</span></td>
+          <td class="ddl">Q2 filing</td>
+        </tr>
+
+        <tr><td colspan="5" class="grp">Unexplained · 2 · ₹1,975</td></tr>
+        <tr>
+          <td class="mono">171-901…27</td><td>8 · Unclassified deduction</td><td class="amt">1,975</td>
+          <td><span class="st unexp">UNEXPLAINED</span>
+              <span class="why">basis: code-unseen — <span class="mono">MISC-ADJ-7</span> not in fee vocabulary</span></td>
+          <td class="ddl">—</td>
+        </tr>
+
+        <tr><td colspan="5" class="grp">Not claimable · 4 · ₹6,230</td></tr>
+        <tr>
+          <td class="mono">171-556…08</td><td>1 · Commission overcharge</td><td class="amt">2,890</td>
+          <td><span class="st noclaim">NOT CLAIMABLE</span>
+              <span class="why">evidence unobtainable — GST tax invoice, seller not GST-registered</span></td>
+          <td class="ddl">—</td>
+        </tr>
+        <tr>
+          <td class="mono">171-338…65</td><td>1 · Commission overcharge</td><td class="amt">1,210</td>
+          <td><span class="st noclaim">NOT CLAIMABLE</span>
+              <span class="why">window expired 21 Aug — SAFE-T, 7 days ago</span></td>
+          <td class="ddl">expired</td>
         </tr>
       </table>
     </div>
 
-    <!-- Detail pane: citation → recomputation → evidence checklist → gated draft -->
     <div class="detail">
       <h2>Commission overcharge · ₹1,240</h2>
-      <div class="sub">Order 171-882…14 · Amazon · SKU KTCH-PAN-28 · Kitchen &gt; Cookware</div>
+      <div class="sub">Order 171-882…14 · SKU KTCH-PAN-28 · Kitchen &gt; Cookware · cycle 22</div>
 
       <div class="sec"><div class="h">Source rows (3)</div><div class="b">
-        <div class="row-cite">settlement_2026-08-21.txt : row 1,204 · Commission −487.50</div>
-        <div class="row-cite">orders_aug.csv : row 88 · sale 3,250.00</div>
-        <div class="row-cite">ratecard v2026-03 : Cookware = 12% ≤₹3,500</div>
+        <div class="cite">settlement_2026-08-21.txt : row 1,204 · Commission −487.50</div>
+        <div class="cite">orders_aug.csv : row 88 · sale 3,250.00</div>
+        <div class="cite">ratecard v2026-03 : Cookware = 12% ≤ ₹3,500</div>
       </div></div>
 
       <div class="sec"><div class="h">Recomputation</div><div class="b diff">
-        charged&nbsp;&nbsp;15.0% → <span class="neg">₹487.50</span><br>
-        rate card 12.0% → ₹390.00<br>
+        charged&nbsp;&nbsp;&nbsp;15.0% → <span class="neg">₹487.50</span><br>
+        rate card&nbsp;12.0% → ₹390.00<br>
         <b>overcharge&nbsp;&nbsp;&nbsp;&nbsp;₹97.50 × 12 units ≈ ₹1,240 (incl. GST on fee)</b>
       </div></div>
 
       <div class="sec"><div class="h">Evidence — SAFE-T requires</div><div class="b">
         <div class="evreq"><span class="ok">Order + settlement row refs</span></div>
         <div class="evreq"><span class="ok">Rate card citation, dated</span></div>
-        <div class="evreq"><span class="ok">Amazon-initiated refund check: n/a</span></div>
-        <div class="evreq"><span class="ok">Within 30-day window (refund dt 24 Aug)</span></div>
+        <div class="evreq"><span class="ok">Not an A-to-Z or seller-issued refund</span></div>
+        <div class="evreq"><span class="ok">Within filing window (refund 24 Aug)</span><span class="unver">rule unverified</span></div>
       </div></div>
 
       <div class="sec"><div class="h">Drafted claim (agent-written, not filed)</div><div class="b claim">
-        "Commission charged at 15% against published Cookware rate of 12% (rate card v2026-03).
-        Recomputation attached; 12 affected units on settlement #S-88231. Requesting ₹1,240 adjustment…"
+        "Commission charged at 15% against published Cookware rate of 12% (rate card
+        v2026-03). Recomputation attached; 12 affected units on settlement #S-88231.
+        Requesting adjustment…"
       </div></div>
 
+      <!-- GATE — CLAIM-READY variant. Approve is the only primary. -->
       <div class="gate">
-        <div class="btn pri">APPROVE &amp; QUEUE</div>
-        <div class="btn">REJECT</div>
-        <div class="note">nothing files without you · logged to audit trail</div>
+        <div class="btns">
+          <div class="btn pri">APPROVE &amp; QUEUE</div>
+          <div class="btn">REJECT</div>
+        </div>
+        <div class="conseq">
+          Writes a claim pack to <b>claims/E-042/</b> and one audit entry.
+          Nothing is filed. Approving twice is a no-op.
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+
+<div class="framelabel">Frame 2 — gate variants for the other three states (detail pane, bottom section only)</div>
+<div class="frame" style="padding:14px 15px">
+  <div style="display:flex;gap:22px">
+
+    <div style="flex:1">
+      <div class="sub" style="font-weight:700;color:var(--ink)">BLOCKED / NOT-CLAIMABLE</div>
+      <div class="gate" style="border-top:none;padding-top:6px">
+        <div class="btns">
+          <div class="btn over">DRAFT WITHOUT EVIDENCE</div>
+          <div class="btn">REJECT</div>
+        </div>
+        <div class="conseq">
+          Drafts without: <b>GST tax invoice (unobtainable)</b>.<br>
+          Pack marked <b>OVERRIDDEN</b>. Recorded as <span class="mono">approve_override</span>
+          with <span class="mono">state_before</span>. Never enters ₹ claim-ready.
+        </div>
+        <div class="conseq" style="color:var(--ink-3)">
+          Label names the blocker <i>kind</i>, so a long blocker string cannot break layout.
+          Four fixed labels: DRAFT WITHOUT EVIDENCE · DRAFT BEFORE WINDOW RESOLVES ·
+          DRAFT WITHOUT CA REVIEW · DRAFT WITHOUT EVIDENCE THAT CANNOT EXIST.
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;border-left:1px solid var(--rule-2);padding-left:22px">
+      <div class="sub" style="font-weight:700;color:var(--ink)">UNEXPLAINED</div>
+      <div class="gate" style="border-top:none;padding-top:6px">
+        <div class="btns">
+          <div class="btn flag">FLAG FOR FOLLOW-UP</div>
+          <div class="btn">DISMISS</div>
+        </div>
+        <div class="conseq">
+          Mechanism is <span class="mono">none</span>, so there is no claim to draft and
+          no pack to write. Writes one audit entry carrying the basis
+          (<span class="mono">code-unseen</span> / <span class="mono">code-known-no-rule</span>).
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<div class="framelabel">Frame 3 — static export (<code>open demo.html</code>) · the judge's zero-dependency path</div>
+<div class="frame" style="padding:14px 15px">
+  <div style="display:flex;gap:22px">
+
+    <div style="flex:1">
+      <div class="sub" style="font-weight:700;color:var(--ink)">Pre-approved exception — shows the RESULT, not a dead button</div>
+      <div class="approved">
+        <div class="h">Approved · 2026-09-04 · audit seq #118</div>
+        <div class="b">
+          <div class="row"><div class="k">claim text</div>
+            <div>"Commission charged at 15% against published Cookware rate of 12%…" <i>(full, selectable)</i></div></div>
+          <div class="row"><div class="k">cited rows</div><div class="mono">4 rows · cited_rows.csv</div></div>
+          <div class="row"><div class="k">recomputation</div><div class="mono">recomputation.csv</div></div>
+          <div class="row"><div class="k">written to</div><div class="mono">claims/E-042/</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;border-left:1px solid var(--rule-2);padding-left:22px">
+      <div class="sub" style="font-weight:700;color:var(--ink)">Every other exception, same position</div>
+      <div class="staticnote" style="border-top:none;padding-top:6px">
+        Static export. Run <code>make serve</code> to approve, override or reject.<br>
+        Everything above this line is exactly what the live tool shows.
+      </div>
+      <div class="conseq" style="color:var(--ink-3);margin-top:14px">
+        No buttons are rendered without a backend (D16). A parity test asserts that
+        everything above the gate renders identically on both paths.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<div class="framelabel">Frame 4 — empty and boundary states · all three are real outcomes, not fallbacks</div>
+<div class="frame" style="padding:14px 15px">
+  <div style="display:flex;gap:20px">
+
+    <!-- 1. The good-news case. The strip STILL renders; zeros are the message. -->
+    <div style="flex:1">
+      <div class="sub" style="font-weight:700;color:var(--ink)">Zero exceptions</div>
+      <div style="border:1px solid var(--rule-2);padding:11px;margin-top:6px">
+        <div class="t1" style="margin-bottom:6px">
+          <div class="k">₹ identified</div><div class="v" style="font-size:24px">₹0</div>
+        </div>
+        <div class="bar" style="height:14px;border-color:var(--rule)">
+          <span style="width:100%;background:var(--bg)"></span>
+        </div>
+        <div class="t4" style="border-top:none;padding-top:6px;margin-top:4px">
+          <div>match rate <b class="num">100%</b> strict · 0 rows not processed</div>
+        </div>
+        <div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--rule-2);font-size:13px">
+          <b>150 orders reconciled. No discrepancies above ₹10.</b>
+          <div class="conseq" style="margin-top:6px">
+            Every settlement line matched a rate-card rule. ₹212 in
+            below-materiality differences was aggregated and excluded.
+            Checked: commission, closing fee, refund reversal, unpaid
+            orders past cycle, TCS, and unclassified deductions.
+          </div>
+        </div>
+      </div>
+      <div class="conseq" style="color:var(--ink-3);margin-top:8px">
+        NOT "No items found." The strip still renders because all-zeros IS the
+        finding, and naming what was checked is what makes the zero trustworthy.
+      </div>
+    </div>
+
+    <!-- 2. The corpus cap is showing. Honest, and D17 designed for it. -->
+    <div style="flex:1;border-left:1px solid var(--rule-2);padding-left:20px">
+      <div class="sub" style="font-weight:700;color:var(--ink)">Every row uncovered</div>
+      <div style="border:1px solid var(--rule-2);padding:11px;margin-top:6px">
+        <div class="t1" style="margin-bottom:6px">
+          <div class="k">₹ identified</div><div class="v" style="font-size:24px">₹0</div>
+        </div>
+        <div class="t4" style="border-top:none;padding-top:6px;margin-top:4px">
+          <div>150 rows not processed: <b class="num">150</b> uncovered</div>
+        </div>
+        <div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--rule-2);font-size:13px">
+          <b>No orders in a covered category.</b>
+          <div class="conseq" style="margin-top:6px">
+            The rate-card corpus covers three Amazon categories:
+            <span class="mono">electronics-accessories</span>,
+            <span class="mono">home-kitchen</span>, <span class="mono">apparel</span>.
+            This batch is <span class="mono">books</span> (112) and
+            <span class="mono">grocery</span> (38).<br>
+            Detectors 1 and 2 need a rule to compare against, so they did not
+            run. Nothing was guessed.
+          </div>
+        </div>
+      </div>
+      <div class="conseq" style="color:var(--ink-3);margin-top:8px">
+        Names the cap rather than reporting a false clean result. D17's whole
+        point, rendered.
+      </div>
+    </div>
+
+    <!-- 3. Parse failure. D7 keeps these in the match-rate denominator. -->
+    <div style="flex:1;border-left:1px solid var(--rule-2);padding-left:20px">
+      <div class="sub" style="font-weight:700;color:var(--ink)">Nothing parsed</div>
+      <div style="border:1px solid var(--rule-2);padding:11px;margin-top:6px">
+        <div class="t4" style="border-top:none;padding-top:0;margin-top:0">
+          <div>match rate <b class="num">0%</b> strict · 150 quarantined</div>
+        </div>
+        <div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--rule-2);font-size:13px">
+          <b>The settlement file did not parse.</b>
+          <div class="conseq" style="margin-top:6px">
+            All 150 rows quarantined. Quarantined rows stay in the match-rate
+            denominator (D7), which is why the rate reads 0% rather than being
+            hidden.
+          </div>
+          <div style="margin-top:8px">
+            <div class="cite">row 1 · expected 24 tab-separated columns, found 1</div>
+            <div class="cite">row 2 · expected 24 tab-separated columns, found 1</div>
+            <div class="cite" style="color:var(--ink-3)">…148 more, same reason</div>
+          </div>
+          <div class="conseq" style="margin-top:8px">
+            <b>Likely cause:</b> the file was saved as CSV. Amazon Settlement
+            Flat File V2 is tab-separated.
+          </div>
+        </div>
+      </div>
+      <div class="conseq" style="color:var(--ink-3);margin-top:8px">
+        Reasons plus one actionable guess. Recovering from an error is the
+        goodwill moment.
+      </div>
+    </div>
+
+  </div>
+</div>
+
 </body>
 </html>
