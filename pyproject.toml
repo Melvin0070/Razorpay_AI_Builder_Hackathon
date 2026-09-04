@@ -1,0 +1,45 @@
+[project]
+name = "leakproof"
+version = "0.1.0"
+description = "Marketplace settlement leakage auditor and claim-recovery agent. Deterministic money, probabilistic language."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+# Runtime path is stdlib-only by design (ADR-0001). Everything else is an extra.
+dependencies = []
+
+[project.optional-dependencies]
+serve = ["fastapi>=0.115", "uvicorn>=0.30"]
+triage = ["anthropic>=0.40"]
+
+[project.scripts]
+leakproof = "leakproof.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "hypothesis>=6.100", "ruff>=0.6"]
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -ra"
+markers = [
+  "slow: long-running checks (throughput, N=5 measurement); excluded from the default run",
+]

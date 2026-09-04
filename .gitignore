@@ -27,3 +27,6 @@ out/
 
 # Not project content
 field-guide.md
+
+# uv cache fallback when ~/.cache is not writable (sandboxed agents)
+.uv-cache/
