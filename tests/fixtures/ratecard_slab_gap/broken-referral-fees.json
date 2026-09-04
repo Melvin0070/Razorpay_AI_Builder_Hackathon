@@ -1,0 +1,59 @@
+{
+  "source": {
+    "label": "Fixture, not a source. Deliberately broken corpus for the CONFIG_ERROR scenario.",
+    "url": "https://sell.amazon.in/fees-and-pricing#referral-fee",
+    "as_of": "2026-09-04",
+    "verified": false
+  },
+  "note": "The 30001-50000 paise band is missing. Everything else resolves, so a lookup at 40000 paise is the only failure and the gate detail must name it.",
+  "rules": [
+    {
+      "rule_id": "fixture-ref-apparel-b1",
+      "kind": "commission",
+      "category_id": "apparel",
+      "percent_bp": 0,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": 30000,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "fixture-ref-apparel-b3",
+      "kind": "commission",
+      "category_id": "apparel",
+      "percent_bp": 2100,
+      "fixed_paise": null,
+      "slab_min_paise": 50001,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "fixture-close-apparel-all",
+      "kind": "fixed-closing-fee",
+      "category_id": "apparel",
+      "percent_bp": null,
+      "fixed_paise": 2600,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "fixture-fee-gst",
+      "kind": "fee-tax",
+      "category_id": null,
+      "percent_bp": 1800,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    }
+  ]
+}

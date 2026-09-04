@@ -1,0 +1,9 @@
+{
+  "declaration_id": "config-error-fixture",
+  "categories": [
+    "apparel"
+  ],
+  "valid_from": "2026-03-16",
+  "valid_to": null,
+  "note": "Hand-authored fixture for the CONFIG_ERROR scenario (scenarios.Scenario.CONFIG_ERROR, ScenarioKind.CONFIG_FIXTURE). Deliberately broken: the commission slabs below skip the band 30001-50000 paise. It exists so a test can assert that a corpus typo inside declared coverage fails the build instead of quietly becoming a documented limitation (D17)."
+}
