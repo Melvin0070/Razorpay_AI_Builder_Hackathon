@@ -190,12 +190,28 @@ def _entry_from_dict(d: dict[str, Any]) -> AuditEntry:
     )
 
 
-def _resolve_artifact(artifacts_root: Path, artifact_path: str) -> Path:
-    """``artifact_path`` is relative to ``artifacts_root`` unless it is
-    already absolute (packs are written under a fixed output directory per
-    SECURITY.md, so both forms occur depending on the caller)."""
-    p = Path(artifact_path)
-    return p if p.is_absolute() else artifacts_root / p
+def _resolve_artifact(artifacts_root: Path, artifact_path: str) -> tuple[Path | None, str | None]:
+    """Resolve ``artifact_path`` under ``artifacts_root``, confining it
+    there. SECURITY.md says claim packs are written under a fixed output
+    directory from ids validated against the report before any path is
+    formed — that is the argument for REJECTING a path that tries to point
+    anywhere else (absolute, or escaping via ``..``), not for accepting one
+    wherever it happens to point.
+
+    Returns ``(resolved, None)`` on a path that is safely confined to
+    ``artifacts_root`` (whether or not a file actually exists there yet —
+    callers check that separately), or ``(None, reason)`` naming why the
+    path itself is rejected outright, distinct from the file simply being
+    missing (an orphan pack).
+    """
+    raw = Path(artifact_path)
+    if raw.is_absolute():
+        return None, "artifact_path must be relative to artifacts_root, not absolute"
+    root = artifacts_root.resolve()
+    resolved = (artifacts_root / raw).resolve()
+    if resolved != root and root not in resolved.parents:
+        return None, "artifact_path escapes artifacts_root"
+    return resolved, None
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,15 +363,23 @@ def verify_chain(path: Path, artifacts_root: Path | None = None) -> ChainVerific
                 ),
             )
         if artifacts_root is not None and entry.artifact_path is not None:
-            resolved = _resolve_artifact(Path(artifacts_root), entry.artifact_path)
-            if not resolved.exists():
+            resolved, error = _resolve_artifact(Path(artifacts_root), entry.artifact_path)
+            if error is not None:
+                return ChainVerification(
+                    ok=False,
+                    entries=len(entries),
+                    first_bad_seq=entry.seq,
+                    detail=f"seq {entry.seq}: {error} ({entry.artifact_path!r})",
+                )
+            assert resolved is not None  # error is None iff resolved is set
+            if not resolved.is_file():
                 return ChainVerification(
                     ok=False,
                     entries=len(entries),
                     first_bad_seq=entry.seq,
                     detail=(
-                        f"seq {entry.seq}: artifact_path {entry.artifact_path!r} "
-                        f"does not exist under {artifacts_root} (orphan pack)"
+                        f"seq {entry.seq}: artifact_path {entry.artifact_path!r} is "
+                        f"not a file under {artifacts_root} (orphan pack)"
                     ),
                 )
         prev_hash = entry.hash
