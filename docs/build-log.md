@@ -46,3 +46,31 @@ Root cause            The project's `.claude/` directory is on the sandbox's wri
 How we got out        Retried the one setup command with the sandbox disabled, through the permission gate; rewrote the remaining files with absolute paths.
 What now prevents it  Absolute paths in every scripted write from here on.
 Time lost             minutes.
+
+### 2026-09-04 · Wave 0 · integrator · Ruleset created before the first push blocked the first push
+What broke            `! [remote rejected] main -> main (push declined due to repository rule violations)` on the bootstrap push of `main`. An earlier attempt, seconds after flipping the repo to public, had returned `remote: Your repository is disabled` (403), which turned out to be transient.
+Root cause            The `main` ruleset (PR required, `verify` status check required) was created while the repository was still empty; the first push that creates `main` is itself a ref update the rules reject. Order of operations: push first, protect second.
+How we got out        Pausing the ruleset for one push from the agent session was blocked twice by the permission classifier (it reads as weakening branch protection, which is the right instinct). The pause-push-re-enable one-liner was handed to the user to run once by hand.
+What now prevents it  Strategy §5 now reads "push `main`, then create the ruleset"; nothing to automate for a one-time step.
+Time lost             ~20 minutes.
+
+### 2026-09-04 · Wave 0 · integrator · Lane roles not visible to the session that created them
+What broke            `Agent type 'lp-research' not found` when launching the three research lanes with the freshly written `.claude/agents/lp-*.md` roles.
+Root cause            Custom subagent definitions are loaded when a session starts; roles created mid-session are not registered until the next session.
+How we got out        Relaunched the lanes as `general-purpose` agents with `model: sonnet` and worktree isolation, pasting the role text into each brief. Cost: reasoning effort could not be set per lane for this wave.
+What now prevents it  From Wave 1 the lanes launch from a fresh session, where `lp-core`, `lp-logic`, `lp-build`, `lp-research` and `lp-reviewer` resolve and carry their `effort` settings.
+Time lost             minutes.
+
+### 2026-09-04 · Wave 0 · integrator · Nine documentation files written empty
+What broke            `can't create temp file for here document: operation not permitted` on every `cat <<'EOF'` in one shell command; the nine target files (spec, five ADRs, README, SECURITY, CONTRIBUTING) were created with zero bytes. A parallel command in the same turn using the same construct succeeded.
+Root cause            The sandbox refused the shell's heredoc temp file while two sandboxed commands ran concurrently; the exact trigger is unknown.
+How we got out        Detected by checking sizes rather than assuming success, removed the empty files, rewrote them with the editor tool, which does not go through a shell temp file.
+What now prevents it  Large file contents are written with the editor tool, not shell heredocs; a size check follows any scripted multi-file write.
+Time lost             ~10 minutes.
+
+### 2026-09-04 · Wave 0 · integrator · uv unusable inside the sandbox
+What broke            `error: Failed to initialize cache at /Users/melvin/.cache/uv ... Operation not permitted` from every `uv` invocation inside the sandbox.
+Root cause            uv's default cache lives under `~/.cache`, which the sandbox does not allow writes to; Python interpreters live under `~/.local/share/uv`, likewise.
+How we got out        One-time interpreter install, lock and sync outside the sandbox; the Makefile now exports `UV_CACHE_DIR`, probing whether the default cache is writable and falling back to a gitignored repo-local cache so lane agents can run `make verify` unattended.
+What now prevents it  The Makefile fallback; `.uv-cache/` in `.gitignore`.
+Time lost             ~10 minutes.
