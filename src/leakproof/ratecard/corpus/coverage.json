@@ -9,5 +9,13 @@
   "valid_to": null,
   "note": "D17. The corpus declares coverage from 16 March 2026, the first date on which every audited kind can be priced for all three declared categories: the referral-fee schedule and the Fulfilment-Centre closing-fee table both take effect that day. Rules with earlier windows (the superseded referral bands, the TCS and TDS rate history) are encoded and cited as history; a lookup outside the window above is UNCOVERED, never CONFIG_ERROR.",
   "fulfilment_channel": "Fulfilment center (excluding Seller Flex)",
-  "fulfilment_channel_note": "Amazon prices the fixed closing fee per fulfilment channel (Fulfilment Centre, Easy Ship, Self Ship, Seller Flex) and the settlement file does not name the channel on the line. The corpus encodes the Fulfilment-Centre schedule and declares that choice here rather than implying it."
+  "fulfilment_channel_note": "Amazon prices the fixed closing fee per fulfilment channel (Fulfilment Centre, Easy Ship, Self Ship, Seller Flex) and the settlement file does not name the channel on the line. The corpus encodes the Fulfilment-Centre schedule and declares that choice here rather than implying it.",
+  "category_nodes": {
+    "electronics-accessories": "Accessories - Electronics, PC and Wireless",
+    "home-kitchen": "Kitchen - Cookware, Tableware & Dinnerware",
+    "apparel": "Apparel - Shirts"
+  },
+  "category_node_divergences": {
+    "electronics-accessories": "contract.CATEGORY_NODES pins this identifier to \"Electronics Accessories\". No node of that name exists in the Amazon.in referral-fee table as read on 2026-09-04: the only two candidates are \"Car Electronics Accessories\", which sits in the Automotive group, and \"Accessories - Electronics, PC and Wireless\", which sits in the group RS3 section 1 names for this identifier, \"Electronics (Camera, Mobile, PC, Wireless) & Accessories\". The corpus encodes the latter and records the divergence here rather than encoding a rate under a node name that does not exist. Interface change request in the lane report: CATEGORY_NODES should read \"Accessories - Electronics, PC and Wireless\"."
+  }
 }

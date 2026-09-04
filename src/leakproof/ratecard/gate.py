@@ -12,15 +12,34 @@ fails the build naming the category, slab and ``as_of`` of the first miss.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
 from leakproof.contract import Disposition, LineKind, Paise
-from leakproof.gates import GateResult
 from leakproof.ratecard.loader import RateCardCorpus, load_rate_card
 from leakproof.types import LookupMiss
 
 GATE_NAME = "ratecard-config-error"
+
+
+@dataclass(frozen=True, slots=True)
+class GateResult:
+    """Field-for-field twin of ``gates.GateResult``, declared here instead of
+    imported. ``gates.py`` opens with ``from leakproof import contract as c``,
+    and the D12 wall test expands a bare-package import into every submodule,
+    so importing ``leakproof.gates`` from here would count as ``ratecard``
+    reaching ``generator``. The twin is a workaround, not a design: the lane
+    report carries an interface change request to make ``gates.py`` import
+    ``leakproof.contract`` by module, after which this class is deleted and the
+    import restored. ``HARD_GATES`` calls the gate and reads these three
+    fields, so registration works unchanged in the meantime.
+    """
+
+    name: str
+    ok: bool
+    detail: str
+
 
 #: How far past the last dated edge to probe an open-ended validity window. Ten
 #: years, so the sweep reaches beyond any plausible batch without reading a

@@ -7,12 +7,13 @@ coverage is a hard gate registered in gates.HARD_GATES at merge.
 
 from __future__ import annotations
 
-from leakproof.ratecard.gate import GATE_NAME, config_error_gate, sweep
+from leakproof.ratecard.gate import GATE_NAME, GateResult, config_error_gate, sweep
 from leakproof.ratecard.loader import CorpusError, RateCardCorpus, load_rate_card
 
 __all__ = [
     "GATE_NAME",
     "CorpusError",
+    "GateResult",
     "RateCardCorpus",
     "config_error_gate",
     "load_rate_card",
