@@ -353,6 +353,21 @@ class AuditLog:
         es = self.entries()
         return es[-1] if es else None
 
+    def next_seq(self) -> int:
+        """The ``seq`` the next :meth:`append` call will assign — 1 for an
+        empty log. ``types.ClaimPack.audit_seq`` is a required field and D8
+        says the pack is written to disk before its audit entry is appended,
+        so the caller needs this seq in advance to put it in the pack.
+
+        Meaningful only under the single-writer assumption in the module
+        docstring: it reads the current head the same way ``append`` does,
+        so a second concurrent writer could observe the same value and both
+        append the same seq — caught by ``verify_chain`` as a duplicate,
+        not prevented here.
+        """
+        head = self.head()
+        return head.seq + 1 if head is not None else 1
+
 
 def verify_chain(path: Path, artifacts_root: Path | None = None) -> ChainVerification:
     """Recompute every hash in ``path`` and check ``prev_hash``/``seq``

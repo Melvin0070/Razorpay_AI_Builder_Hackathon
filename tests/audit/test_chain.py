@@ -129,6 +129,20 @@ def test_idempotent_open_continues_seq_and_prev_hash(tmp_path):
     assert result.entries == 2
 
 
+def test_next_seq_on_empty_log_is_one_and_matches_append(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    log = AuditLog(path)
+    assert log.next_seq() == 1
+
+    e1 = append_sample(log, "2026-08-21T10:00:00Z")
+    assert e1.seq == 1
+    assert log.next_seq() == 2
+
+    e2 = append_sample(log, "2026-08-21T10:00:01Z")
+    assert e2.seq == 2
+    assert log.next_seq() == 3
+
+
 def test_gate_passes_with_no_log_file(tmp_path):
     result = audit_chain_gate(tmp_path / "nope.jsonl", tmp_path / "artifacts")
     assert result.ok
