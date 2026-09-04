@@ -1,0 +1,49 @@
+{
+  "source": {
+    "label": "Notifications issued under section 52(1) of the Central Goods and Services Tax Act, 2017 (GST Council tax repository)",
+    "url": "https://gstcouncil.gov.in/node/4059",
+    "as_of": "2026-09-04",
+    "verified": true
+  },
+  "note": "Section 52(1) sets only a ceiling; the collected rate is fixed by notification, and each notification fixes ONE leg. Notification 52/2018-Central Tax fixes the CGST leg at \"half per cent. of the net value of intra-State taxable supplies\"; notification 15/2024-Central Tax substitutes \"0.25 per cent.\" for \"half per cent.\" with effect from its publication on 10 July 2024. The settlement file withholds TCS as TCS-CGST + TCS-SGST on an intra-State supply, or TCS-IGST on an inter-State one, and all three map to LineKind.TCS, so what a detector recomputes is the AGGREGATE: twice the CGST leg. That is what percent_bp encodes. This resolves RS3 open item 5: the secondary sources reporting \"1% to 0.5%\" and \"0.25%\" are both right, the first quoting the aggregate and the second the CGST leg.",
+  "rules": [
+    {
+      "rule_id": "cgst-52-2018-tcs-aggregate",
+      "kind": "tcs",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": 100,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2018-09-20",
+      "valid_to": "2024-07-09",
+      "audited": true,
+      "citation": {
+        "label": "Notification No. 52/2018-Central Tax, 20 September 2018: electronic commerce operators collect \"half per cent.\" of the net value of intra-State taxable supplies (CGST leg). Aggregate encoded here is the CGST leg doubled; the mirroring SGST and IGST notifications were not read in this session.",
+        "url": "https://gstcouncil.gov.in/sites/default/files/2024-05/notfctn-52-central-tax-english-new.pdf",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "cgst-15-2024-tcs-aggregate",
+      "kind": "tcs",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": 50,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2024-07-10",
+      "valid_to": null,
+      "audited": true,
+      "citation": {
+        "label": "Notification No. 15/2024-Central Tax, 10 July 2024: for the words \"half per cent.\", the figure and word \"0.25 per cent.\" shall be substituted; in force from the date of publication. Aggregate encoded here is the CGST leg doubled; the mirroring SGST and IGST notifications were not read in this session.",
+        "url": "https://gstcouncil.gov.in/sites/default/files/2024-09/central-tax-15-2024-11072024.pdf",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    }
+  ]
+}

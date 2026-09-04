@@ -7,10 +7,14 @@ coverage is a hard gate registered in gates.HARD_GATES at merge.
 
 from __future__ import annotations
 
-from pathlib import Path
+from leakproof.ratecard.gate import GATE_NAME, config_error_gate, sweep
+from leakproof.ratecard.loader import CorpusError, RateCardCorpus, load_rate_card
 
-from leakproof.types import RateCard
-
-
-def load_rate_card(path: Path | None = None) -> RateCard:
-    raise NotImplementedError("lane C, issue #6")
+__all__ = [
+    "GATE_NAME",
+    "CorpusError",
+    "RateCardCorpus",
+    "config_error_gate",
+    "load_rate_card",
+    "sweep",
+]

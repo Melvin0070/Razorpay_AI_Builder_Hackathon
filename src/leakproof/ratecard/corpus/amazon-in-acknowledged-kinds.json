@@ -1,0 +1,296 @@
+{
+  "source": {
+    "label": "Amazon.in Fees and Pricing (fee types, \"Other Fees\", payment cycles and reserve)",
+    "url": "https://sell.amazon.in/fees-and-pricing",
+    "as_of": "2026-09-04",
+    "verified": true
+  },
+  "note": "ADR-0005 decision 2: a kind the corpus acknowledges is a known, expected line with no audit rule, and it is never class 8. Without these rows every ordinary shipping fee and promotion would land in UNEXPLAINED and flood the queue. Acknowledgements carry no rate on purpose: audited is false, percent_bp and fixed_paise are null. TECHNOLOGY_FEE and UNCLASSIFIED are deliberately absent, which is what the C8_CODE_KNOWN_NO_RULE and C8_CODE_UNSEEN scenarios depend on.",
+  "rules": [
+    {
+      "rule_id": "amz-in-ack-shipping-fee",
+      "kind": "shipping-fee",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon.in Fees and Pricing, \"Weight Handling Fee (Shipping Fee)\": priced by weight, size, distance and fulfilment channel, none of which the settlement line carries, so it is acknowledged rather than audited.",
+        "url": "https://sell.amazon.in/fees-and-pricing#shipping-fee",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-fulfilment-fee",
+      "kind": "fulfilment-fee",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon.in Fees and Pricing, \"Other Fees\": Pick & Pack Fee (FC only). Weight- and size-driven, not recomputable from a settlement line.",
+        "url": "https://sell.amazon.in/fees-and-pricing#other-fees",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-storage-fee",
+      "kind": "storage-fee",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon.in Fees and Pricing, \"Other Fees\": Storage Fee (FC only), billed monthly on warehouse volume, so it is not attributable to one order line.",
+        "url": "https://sell.amazon.in/fees-and-pricing#other-fees",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-promotion",
+      "kind": "promotion",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Seller-configured promotional discount. Neither public fee page names it; it is a seller-authored amount, not a marketplace fee, so no rate can exist. Acknowledged from the settlement V2 vocabulary (contract.AMOUNT_TYPE_VOCABULARY, amount-type Promotion).",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-reserve",
+      "kind": "reserve",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon.in Fees and Pricing, \"Payment Cycles\": funds held back and released across cycles. A reserve movement is a timing entry, not a deduction, and nets to zero across cycles, so there is nothing to audit per line.",
+        "url": "https://sell.amazon.in/fees-and-pricing#payment-cycles",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-safet-reimbursement",
+      "kind": "safe-t-reimbursement",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon India Seller Forums, Amazon staff post on the return order fee structure, which links the SAFE-T and A-to-z resources. A SAFE-T reimbursement is money paid TO the seller as the outcome of a claim, so it is acknowledged, never audited against a rate. The authoritative Help Hub pages are login-walled (RS3 section 5).",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/d18ac900-0473-44dc-911c-5038547ad53c",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-refund-admin-fee",
+      "kind": "refund-admin-fee",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon India Seller Forums, Amazon staff post \"Do you want to know more about the Return Order Fee Structure?\": the India term is \"Refund Commission\", charged when a customer returns an item, based on item price, waived by STEP level. The post publishes NO rate table and the two authoritative Help Hub pages (Manage refunds, Manage returns) are login-walled, so the fee is acknowledged rather than audited: the corpus knows the deduction is expected but cannot price it from any public source (D14, RS3 section 5). The US \"Refund Administration Fee\" is a different mechanism and is deliberately not used.",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/d18ac900-0473-44dc-911c-5038547ad53c",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-gift-wrap",
+      "kind": "gift-wrap",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Gift wrap charge and its chargeback. Neither public fee page names it; acknowledged from the settlement V2 vocabulary so an ordinary gift-wrap line is not reported as unexplained.",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-goodwill",
+      "kind": "goodwill",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Goodwill adjustment, a discretionary amount with no schedule by definition. Neither public fee page names it; acknowledged from the settlement V2 vocabulary.",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-restocking-fee",
+      "kind": "restocking-fee",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Restocking fee retained from a buyer refund. Neither public fee page names it; acknowledged from the settlement V2 vocabulary.",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-marketplace-facilitator-tax",
+      "kind": "marketplace-facilitator-tax",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Tax the marketplace collects and remits on the seller's behalf, withheld from the payout. It mirrors tax already carried on the order lines rather than a fee the corpus prices, and class 7 audits TCS and TDS only, so it is acknowledged. Neither public fee page names it.",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-principal",
+      "kind": "principal",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon.in Fees and Pricing, \"Calculating Profitability\": the item sale price credited to the seller. Income, not a deduction; acknowledged so it is never class 8.",
+        "url": "https://sell.amazon.in/fees-and-pricing#calculating-profitability",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-shipping-charge",
+      "kind": "shipping-charge",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "Amazon.in Fees and Pricing, closing fee section: \"item price that is paid by the buyer (including any shipping or gift-wrap charges charged by the seller)\". Income the seller charges the buyer, not a marketplace deduction.",
+        "url": "https://sell.amazon.in/fees-and-pricing#closing-fee",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-item-tax",
+      "kind": "item-tax",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "GST collected from the buyer on the item and passed to the seller. Its rate is the product's own HSN rate, which no settlement line carries, so it is acknowledged; class 7 audits the withheld taxes (TCS, TDS) instead.",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "amz-in-ack-shipping-charge-tax",
+      "kind": "shipping-charge-tax",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": null,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": false,
+      "citation": {
+        "label": "GST collected from the buyer on the seller's shipping charge. Same reason as item-tax: the applicable rate is not on the line.",
+        "url": "https://sell.amazon.in/fees-and-pricing",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    }
+  ]
+}

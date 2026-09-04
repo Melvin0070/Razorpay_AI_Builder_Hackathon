@@ -1,0 +1,13 @@
+{
+  "declaration_id": "amazon-in-2026",
+  "categories": [
+    "electronics-accessories",
+    "home-kitchen",
+    "apparel"
+  ],
+  "valid_from": "2026-03-16",
+  "valid_to": null,
+  "note": "D17. The corpus declares coverage from 16 March 2026, the first date on which every audited kind can be priced for all three declared categories: the referral-fee schedule and the Fulfilment-Centre closing-fee table both take effect that day. Rules with earlier windows (the superseded referral bands, the TCS and TDS rate history) are encoded and cited as history; a lookup outside the window above is UNCOVERED, never CONFIG_ERROR.",
+  "fulfilment_channel": "Fulfilment center (excluding Seller Flex)",
+  "fulfilment_channel_note": "Amazon prices the fixed closing fee per fulfilment channel (Fulfilment Centre, Easy Ship, Self Ship, Seller Flex) and the settlement file does not name the channel on the line. The corpus encodes the Fulfilment-Centre schedule and declares that choice here rather than implying it."
+}
