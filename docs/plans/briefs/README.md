@@ -24,6 +24,35 @@ Concurrency caps: at most six lanes per wave, at most two `lp-core` lanes at onc
   request accepted from the previous wave.
 - Research memos the wave depends on are merged.
 
+## Decisions carried into every Wave 1 and Wave 2 brief (from the Wave 0 research)
+
+- **Category identifiers are pinned to one Amazon.in fee-category node each**
+  (`contract.CATEGORY_NODES`): `electronics-accessories` → "Electronics
+  Accessories"; `home-kitchen` → "Kitchen - Cookware, Tableware & Dinnerware";
+  `apparel` → "Apparel - Shirts". Lanes B and C encode that node's own tiers,
+  never an umbrella (RS3 §1).
+- **Three 2026 fee effective dates exist**: March 16, June 10, September 7.
+  Rules carry validity windows; a batch's `as_of` selects the schedule in
+  force (RS3 §2, §3).
+- **The SAFE-T filing window is contradicted across secondary sources** (30,
+  60, 15 and a 50-day figure) and the primary page is login-walled (RS2 open
+  item 6). Lanes F and K each read the sources independently; where sources
+  disagree, both encode the **shortest** figure, mark it `verified: false`,
+  and record the alternatives (in the label rationale, in the rule docstring).
+  Same tie-break, independent readings.
+- **If the SAFE-T sources indicate fee overcharges (classes 1 and 2) are not
+  SAFE-T-shaped at all**, F and K say so in their reports instead of forcing a
+  label or rule. The integrator then decides whether `PRIMARY_MECHANISM` for
+  class 1 moves to support-ticket and the demo drills a class-5 claim instead.
+- **Refund fee terminology**: the India term is "Refund Commission"; the US
+  "Refund Administration Fee" is a different mechanism (RS3 §5). Cite the
+  India forum post RS3 names when the Help Hub page is login-walled.
+- **Statutory sources**: `incometaxindia.gov.in` and `pib.gov.in` are
+  bot-blocked; cite the Gazette of India Finance (No. 2) Act 2024 PDF for the
+  194-O change and the GST Council notifications for TCS (RS3 §6).
+- **Research lanes**: the browse daemon cannot bind a port inside the sandbox;
+  run browse commands with the sandbox disabled from the first call.
+
 ## Closing a lane
 
 1. Read the lane report. Copy its "What broke" entries into `docs/build-log.md`.

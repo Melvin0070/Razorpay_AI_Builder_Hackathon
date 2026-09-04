@@ -21,8 +21,19 @@ they may never share a file.
   integrator).
 - `docs/research/ratecard-sources.md` (URLs only, by design). Fetch the fee
   numbers from those primary or secondary sources yourself, with the browse
-  skill, and record for each number the URL and as-of date in your module's
+  skill (run browse with the sandbox disabled; it cannot bind a port inside
+  it), and record for each number the URL and as-of date in your module's
   docstring. That record is what makes "two independent encodings" auditable.
+- `docs/plans/briefs/README.md`, "Decisions carried into every brief": the
+  three category identifiers are pinned to one Amazon.in fee-category node
+  each (`contract.CATEGORY_NODES`); encode that node's tiers. Three 2026
+  effective dates exist; the demo batch's `as_of` (late August 2026) falls
+  between the June 10 and September 7 changes, so encode the schedule in
+  force on `as_of` and say which one in the manifest's `generator_version`.
+- `docs/research/amazon-v2-sample.md` (RS1) §1 and §4: write amounts with `.`
+  as the decimal separator and dates as `YYYY-MM-DD`, keep `transaction-type`
+  strings exactly as the contract tables give them, and expect the parser to
+  case-fold.
 
 ## Files you own
 - `src/leakproof/generator/` (everything under it)

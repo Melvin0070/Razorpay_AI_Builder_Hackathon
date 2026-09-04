@@ -18,9 +18,18 @@ labels. Do not summarise the rules anywhere outside the label rationales.
   "Evidence-state model" (the seven-step ladder: your labels name steps),
   D14, D18 (calendar days), D19, D20.
 - `docs/research/safe-t.md` (RS2): the source list and claim examples. Read the
-  primary pages it lists yourself, with the browse skill. Never enter
+  primary pages it lists yourself, with the browse skill (run browse with the
+  sandbox disabled; it cannot bind a port inside it). Never enter
   credentials; login-walled pages get `verified: false` with the secondary
-  source you used instead.
+  source you used instead. Note RS2's region caveat: `.in` forum URLs can
+  carry US content; use its India-confirmed rows.
+- `docs/plans/briefs/README.md`, "Decisions carried into every brief": the
+  filing-window tie-break (shortest figure where sources disagree,
+  `verified: false`, alternatives recorded in the rationale), and the
+  standing instruction to say so in your report if the sources indicate fee
+  overcharges (classes 1 and 2) are not SAFE-T-shaped, rather than forcing a
+  label. Also record in your open questions any scenario whose label depends
+  on a page you could not read.
 - ADR-0003, ADR-0005. Strategy §1, §3 (lane F), §4.
 
 ## Files you own

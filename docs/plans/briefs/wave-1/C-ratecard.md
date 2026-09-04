@@ -15,9 +15,24 @@ designed (D17).
 - Strategy §3 (Wave 1, lane C), §4.
 - ADR-0005 (audited vs acknowledged kinds; class-8 semantics).
 - `docs/research/ratecard-sources.md`: URLs and the coverage decision. Fetch
-  the numbers from the sources yourself with the browse skill; record the URL
+  the numbers from the sources yourself with the browse skill (run browse
+  with the sandbox disabled; it cannot bind a port inside it); record the URL
   and as-of date on every rule as its `Citation`, `verified: true` only when
   the primary page was actually read.
+- `docs/plans/briefs/README.md`, "Decisions carried into every brief": the
+  category identifiers are pinned to one fee-category node each
+  (`contract.CATEGORY_NODES`); cite the exact node name in every rule. Encode
+  the March 16, June 10 and September 7, 2026 changes as validity windows
+  where they touch your kinds. The refund fee's India term is "Refund
+  Commission" and its Help Hub page is login-walled: cite the forum post RS3
+  §5 names, `verified: false`. For TDS 194-O cite the Gazette PDF RS3 §6
+  names; for TCS resolve the combined-vs-single-leg ambiguity from the
+  primary notification, not from blog titles (RS3 open item 5).
+- Acknowledge (`audited: false`) every `LineKind` that is neither audited nor
+  `TECHNOLOGY_FEE` / `UNCLASSIFIED`: `SHIPPING_FEE`, `PROMOTION`, `RESERVE`,
+  `SAFET_REIMBURSEMENT`, `FULFILMENT_FEE`, `STORAGE_FEE`, `GIFT_WRAP`,
+  `GOODWILL`, `RESTOCKING_FEE`, `MARKETPLACE_FACILITATOR_TAX`, and the income
+  kinds.
 
 ## Files you own
 - `src/leakproof/ratecard/` (loader, corpus data files, gate function)

@@ -36,7 +36,15 @@ and unknown fee codes become unclassified lines rather than disappearing (D4).
    `line_id = make_line_id(path.name, physical_row)` (header is row 1),
    amounts parsed from the decimal string straight to integer paise (no
    float; reject thousands separators), dates parsed per the spec, `kind`
-   via `classify_line`, `txn_type` via `classify_transaction`.
+   via `classify_line`, `txn_type` via `classify_transaction`, and the raw
+   `transaction-type` string kept in `transaction_type_raw`.
+   Three traps RS1 confirmed (spec, top of file): the decimal separator is
+   locale-dependent, so detect it per file (`.` or `,`, from the summary
+   row's `total-amount`) and quarantine any amount that does not parse under
+   the detected separator; `transaction-type` is an open vocabulary; the
+   date and timestamp formats are unconfirmed, so accept the three forms the
+   spec lists and quarantine anything else with the literal string. All
+   vocabulary lookups go through the contract functions, which case-fold.
 2. Quarantine reasons, each exact and stable (they are shown on screen):
    `expected 24 tab-separated columns, found N`; `amount not numeric: '...'`;
    `bad date in <column>: '...'`; `missing order-id on Order row`; `unknown

@@ -74,3 +74,17 @@ Root cause            uv's default cache lives under `~/.cache`, which the sandb
 How we got out        One-time interpreter install, lock and sync outside the sandbox; the Makefile now exports `UV_CACHE_DIR`, probing whether the default cache is writable and falling back to a gitignored repo-local cache so lane agents can run `make verify` unattended.
 What now prevents it  The Makefile fallback; `.uv-cache/` in `.gitignore`.
 Time lost             ~10 minutes.
+
+### 2026-09-04 · Wave 0 · RS1, RS2, RS3 · browse daemon cannot bind a port inside the sandbox
+What broke            All three research lanes hit `EPERM: Failed to listen at 127.0.0.1` when the browse skill tried to start its headless-Chromium daemon; every browse call after that needed the sandbox disabled per command.
+Root cause            The sandbox blocks binding localhost ports; the browse daemon is a local HTTP server.
+How we got out        Each lane retried with the sandbox disabled through the permission gate, as the sandbox-failure protocol allows. The harness flagged RS1's transcript for review because of it; the review found only the memo file touched, which is what the lane was asked to write.
+What now prevents it  The research role now says up front that the browse daemon needs the sandbox off, so lanes stop losing a round-trip discovering it. Longer term: start the daemon once from the integrator session before launching research lanes.
+Time lost             ~5 minutes per lane.
+
+### 2026-09-04 · Wave 0 · RS1 · The design doc's "vendors publish sample settlement files" premise was wrong
+What broke            Nothing in code. The design doc's Constraints section said several integrators publish sample V2 settlement flat files and estimated thirty minutes to obtain one. RS1 checked all five named vendors plus GitHub, grep.app, Sourcegraph and four seller forums: every vendor publishes documentation about the format, none publishes a data file.
+Root cause            An untested assumption written into the plan as a fact.
+How we got out        The 24-column spec is now verified against four independent sources instead, and the parser stays tested only against data this project writes, which the README already states as a limitation. Open Question 2 is closed as "not obtainable" with the evidence in `docs/research/amazon-v2-sample.md`.
+What now prevents it  Nothing to automate; the correction is recorded in the design doc's open questions rather than silently dropped.
+Time lost             none beyond the research lane's own time box.
