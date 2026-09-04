@@ -105,6 +105,45 @@ class AuditLogCorruptError(ValueError):
         )
 
 
+#: Default read-window size for _read_tail_line_fast's backward scan. Tests
+#: pass a small value to exercise the multi-chunk loop without a huge fixture.
+_DEFAULT_TAIL_CHUNK_SIZE: Final[int] = 65536
+
+
+def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SIZE) -> str | None:
+    """Read only the last newline-terminated line of ``path``, seeking from
+    the end and growing the read window a chunk at a time — used by
+    ``AuditLog.head`` to avoid parsing every earlier line just to find the
+    current head, which used to make a whole log's worth of appends cost
+    O(n^2) (each of n appends re-parsed all entries so far to find the tail).
+
+    Returns ``None`` when it cannot confidently identify a complete last
+    line: an empty file, or a file whose last byte is not a newline (a write
+    interrupted mid-line, or simply a file this function should not guess
+    about). The caller falls back to the accurate, fully-parsed path in that
+    case rather than trusting a partial read.
+    """
+    size = path.stat().st_size
+    if size == 0:
+        return None
+    with path.open("rb") as fh:
+        fh.seek(-1, os.SEEK_END)
+        if fh.read(1) != b"\n":
+            return None
+        chunk = b""
+        pos = size
+        while pos > 0:
+            step = min(chunk_size, pos)
+            pos -= step
+            fh.seek(pos)
+            chunk = fh.read(step) + chunk
+            body = chunk[:-1]  # drop the one trailing newline confirmed above
+            idx = body.rfind(b"\n")
+            if idx != -1 or pos == 0:
+                return body[idx + 1 :].decode("utf-8")
+    return None  # unreachable: the loop above always returns once pos == 0
+
+
 def _describe_parse_error(exc: Exception) -> str:
     """Turn one of ``_PARSE_ERRORS`` into a human-readable reason. KeyError's
     default ``str()`` is just the missing key's repr (e.g. ``'seq'``), which
@@ -295,6 +334,22 @@ class AuditLog:
         return tuple(out)
 
     def head(self) -> AuditEntry | None:
+        """The last entry, or ``None`` for an empty/absent log. Reads only
+        the tail of the file (see ``_read_tail_line_fast``) rather than
+        parsing every earlier line, so the cost of an append is independent
+        of how many entries already exist. Falls back to the accurate,
+        fully-parsed ``entries()`` (which raises :class:`AuditLogCorruptError`
+        naming the exact line) whenever the fast tail read cannot confidently
+        parse a complete last line — that fallback only runs on the rare
+        corrupt-log path, never on a healthy append."""
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return None
+        tail = _read_tail_line_fast(self.path)
+        if tail is not None:
+            try:
+                return _entry_from_dict(json.loads(tail))
+            except _PARSE_ERRORS:
+                pass  # fall through to the accurate full scan below
         es = self.entries()
         return es[-1] if es else None
 
