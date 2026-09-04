@@ -37,6 +37,17 @@ SECURITY.md is explicit that this makes the log tamper-*evident*, not
 tamper-*proof*: anyone with write access to the file can rewrite an entry and
 re-chain everything after it by hand. Verification catches an edit that was
 NOT re-chained — the common case, and the one a hard gate can act on.
+
+Malformed content (a truncated last line from an interrupted write, a garbage
+line, a line missing a required key, a bad enum value) is a fact about the
+file, not a bug in the caller: ``entries()``, ``head()`` and ``append()``
+never let ``json.JSONDecodeError``/``KeyError``/``ValueError``/``TypeError``
+escape from a bad line. They raise the single typed
+:class:`AuditLogCorruptError` instead. ``verify_chain`` and
+``audit_chain_gate`` in turn never raise on file content at all — a bad line
+is reported as a normal, non-ok :class:`ChainVerification`/``GateResult``
+naming the physical line and why, so a corrupt log fails the gate rather than
+crashing ``make verify``.
 """
 
 from __future__ import annotations
@@ -56,6 +67,52 @@ from leakproof.types import AuditEntry
 
 #: Genesis previous-hash: 64 zero characters, one per sha256 hex digit.
 GENESIS_PREV_HASH: Final[str] = "0" * 64
+
+#: Exceptions a malformed on-disk line can raise while being parsed back
+#: into an AuditEntry: bad JSON, a missing field, a value of the wrong
+#: shape for its field, or an enum string that names no member.
+_PARSE_ERRORS: Final[tuple[type[Exception], ...]] = (
+    json.JSONDecodeError,
+    KeyError,
+    ValueError,
+    TypeError,
+)
+
+
+class AuditLogCorruptError(ValueError):
+    """Raised by :meth:`AuditLog.entries`, :meth:`AuditLog.head` and
+    :meth:`AuditLog.append` when a physical line in the on-disk log cannot be
+    parsed back into an ``AuditEntry`` — bad JSON, a missing key, a value the
+    wrong shape, or an enum string that names no member.
+
+    The log is append-only and cannot be repaired in place: there is no
+    "rewrite just this line" operation, because doing so without also
+    re-chaining every entry after it is exactly the tampering the hash chain
+    exists to catch. A corrupt line must be investigated (and, if it truly
+    needs fixing, fixed by a human who understands the chain implications)
+    before appending is safe to resume — ``append`` refuses to append past a
+    line it cannot read, since it cannot otherwise determine the correct
+    ``seq``/``prev_hash`` to continue from.
+    """
+
+    def __init__(self, line_no: int, reason: str) -> None:
+        self.line_no = line_no
+        self.reason = reason
+        super().__init__(
+            f"audit log corrupt at line {line_no}: {reason}. The log is "
+            "append-only and cannot be repaired in place — investigate "
+            "before appending continues."
+        )
+
+
+def _describe_parse_error(exc: Exception) -> str:
+    """Turn one of ``_PARSE_ERRORS`` into a human-readable reason. KeyError's
+    default ``str()`` is just the missing key's repr (e.g. ``'seq'``), which
+    reads as a typo without context; every other error's message already
+    names what was wrong."""
+    if isinstance(exc, KeyError):
+        return f"missing key {exc}"
+    return str(exc)
 
 
 def _project(entry: AuditEntry) -> dict[str, Any]:
@@ -202,15 +259,23 @@ class AuditLog:
         return entry
 
     def entries(self) -> tuple[AuditEntry, ...]:
+        """Every entry, in file order. Raises :class:`AuditLogCorruptError`
+        naming the exact physical line the moment a line fails to parse,
+        rather than returning a partial result — a caller that wants the
+        good entries before the break point should catch the error and read
+        ``exc.line_no`` (``verify_chain`` does exactly this)."""
         if not self.path.exists():
             return ()
         out: list[AuditEntry] = []
         with self.path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+            for line_no, raw_line in enumerate(fh, start=1):
+                line = raw_line.strip()
                 if not line:
                     continue
-                out.append(_entry_from_dict(json.loads(line)))
+                try:
+                    out.append(_entry_from_dict(json.loads(line)))
+                except _PARSE_ERRORS as exc:
+                    raise AuditLogCorruptError(line_no, _describe_parse_error(exc)) from exc
         return tuple(out)
 
     def head(self) -> AuditEntry | None:
@@ -235,7 +300,20 @@ def verify_chain(path: Path, artifacts_root: Path | None = None) -> ChainVerific
     if not path.exists():
         return ChainVerification(ok=True, entries=0, first_bad_seq=None, detail="no audit log yet")
 
-    entries = AuditLog(path).entries()
+    try:
+        entries = AuditLog(path).entries()
+    except AuditLogCorruptError as exc:
+        # A line that cannot even be parsed is reported like any other
+        # verification failure — never a raised exception (see module
+        # docstring) — naming the physical line, which is also the seq that
+        # line was expected to carry under normal one-entry-per-line usage.
+        return ChainVerification(
+            ok=False,
+            entries=exc.line_no - 1,
+            first_bad_seq=exc.line_no,
+            detail=f"line {exc.line_no} unparseable: {exc.reason}",
+        )
+
     prev_hash = GENESIS_PREV_HASH
     expected_seq = 1
     for entry in entries:
