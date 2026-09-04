@@ -10,9 +10,13 @@ Canonical JSON (the exact bytes that get hashed), so lane O and the metrics
 harness can reproduce it independently rather than only through this module:
 
 1. Take the entry, drop its own ``hash`` field.
-2. Project every remaining field to a JSON-safe value the way
-   ``leakproof.serialize.to_jsonable`` does: enums by their ``.value``
-   string, ``datetime.date`` as ``.isoformat()``, everything else as-is.
+2. Project every remaining field to a JSON-safe value (``_project`` below,
+   owned by this module — NOT ``leakproof.serialize.to_jsonable``, whose
+   docstring disclaims audit canonicalisation and whose derived-field table
+   is keyed by dataclass class name, so a later change there must not be
+   able to silently change a hash already committed to disk): enums by their
+   ``.value`` string, ``datetime.date`` as ``.isoformat()``, everything else
+   as-is.
 3. ``json.dumps(obj, sort_keys=True, separators=(",", ":"),
    ensure_ascii=False)`` — sorted keys and no incidental whitespace so the
    same entry always serialises to the same bytes regardless of field
@@ -48,19 +52,45 @@ from typing import Any, Final
 
 from leakproof.contract import AuditAction, Paise, State
 from leakproof.gates import GateResult
-from leakproof.serialize import to_jsonable
 from leakproof.types import AuditEntry
 
 #: Genesis previous-hash: 64 zero characters, one per sha256 hex digit.
 GENESIS_PREV_HASH: Final[str] = "0" * 64
 
 
+def _project(entry: AuditEntry) -> dict[str, Any]:
+    """The twelve-field, JSON-safe projection of ``entry`` (``hash``
+    included — callers that need it excluded, i.e. ``canonical_json``, pop it
+    themselves). Owned entirely by this module rather than delegating to
+    ``leakproof.serialize.to_jsonable``: that function's docstring says audit
+    canonicalisation is not its job, and its ``_DERIVED`` table injects extra
+    keys by dataclass class name — an unrelated future change there would
+    silently change every hash already committed to disk, and the chain
+    verifier would then accuse the operator of tampering. Enums by
+    ``.value``, ``date`` by ``.isoformat()``, everything else as-is."""
+    return {
+        "seq": entry.seq,
+        "prev_hash": entry.prev_hash,
+        "hash": entry.hash,
+        "ts": entry.ts,
+        "as_of": entry.as_of.isoformat(),
+        "actor": entry.actor,
+        "action": entry.action.value,
+        "exception_id": entry.exception_id,
+        "state_before": entry.state_before.value if entry.state_before is not None else None,
+        "state_after": entry.state_after.value if entry.state_after is not None else None,
+        "amount_paise": entry.amount_paise,
+        "artifact_path": entry.artifact_path,
+    }
+
+
 def canonical_json(entry: AuditEntry) -> str:
     """The exact string that gets hashed for ``entry``: every field except
-    ``hash`` itself, projected to JSON-safe values and dumped with sorted
-    keys and no incidental whitespace. See the module docstring for why this
-    exact recipe, and reproduce it exactly rather than approximating it."""
-    payload = to_jsonable(entry)
+    ``hash`` itself, projected to JSON-safe values (see ``_project``) and
+    dumped with sorted keys and no incidental whitespace. See the module
+    docstring for why this exact recipe, and reproduce it exactly rather than
+    approximating it."""
+    payload = _project(entry)
     payload.pop("hash", None)
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -83,7 +113,7 @@ def _entry_line(entry: AuditEntry) -> str:
     JSON-safe projection as ``canonical_json``, but keeping ``hash`` (this is
     what actually lands on disk) and sorted/compact for a stable, diffable
     file — not part of the hash rule itself."""
-    return json.dumps(to_jsonable(entry), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(_project(entry), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _entry_from_dict(d: dict[str, Any]) -> AuditEntry:
