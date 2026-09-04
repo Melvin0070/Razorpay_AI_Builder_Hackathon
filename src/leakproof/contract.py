@@ -455,7 +455,7 @@ def classify_transaction(transaction_type: str) -> TransactionType:
 #: each, so an unpinned identifier would make the coverage declaration false).
 #: Node names only; every rate lives in ratecard/ and generator/ separately.
 CATEGORY_NODES: Final[dict[str, str]] = {
-    "electronics-accessories": "Electronics Accessories",
+    "electronics-accessories": "Accessories - Electronics, PC and Wireless",
     "home-kitchen": "Kitchen - Cookware, Tableware & Dinnerware",
     "apparel": "Apparel - Shirts",
 }
