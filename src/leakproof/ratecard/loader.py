@@ -80,6 +80,9 @@ def _parse_rule(raw: dict[str, Any], *, source: Citation, where: str) -> RateRul
     if not rule_id:
         raise CorpusError(f"{where}: rule_id is required")
     at = f"{where}[{rule_id}]"
+    for field in ("kind", "category_id", "valid_from"):
+        if field not in raw:
+            raise CorpusError(f"{at}: {field!r} is required (write null for an absent value)")
     citation = _parse_citation(raw["citation"], where=at) if "citation" in raw else source
     values = {f: _parse_int(raw.get(f), where=f"{at}.{f}") for f in _MONEY_FIELDS}
     valid_to = raw.get("valid_to")
@@ -300,12 +303,17 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
         raise CorpusError(f"corpus directory not found: {root}")
 
     coverage_raw = _read_json(root / COVERAGE_FILE)
+    for field in ("categories", "valid_from"):
+        if field not in coverage_raw:
+            raise CorpusError(f"{COVERAGE_FILE}: {field!r} is required")
     rules: list[RateRule] = []
     seen: dict[str, str] = {}
     for file in sorted(root.glob("*.json")):
         if file.name == COVERAGE_FILE:
             continue
         doc = _read_json(file)
+        if "source" not in doc:
+            raise CorpusError(f"{file.name}: every rule document needs a 'source' citation (D14)")
         source = _parse_citation(doc["source"], where=file.name)
         for raw in doc.get("rules", ()):
             rule = _parse_rule(raw, source=source, where=file.name)
