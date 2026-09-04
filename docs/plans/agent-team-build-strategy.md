@@ -288,10 +288,13 @@ and nothing decorative:
 - Create (or confirm) the repository; recommend **public from day one**: the
   buildathon requires a public repo at submission, there are no secrets in the tree,
   and branch-protection rulesets are only available on public repos under the free
-  plan. Push `main`.
-- Ruleset on `main`: pull request required (0 approvals, solo), status check
-  `verify` required, force-push and deletion blocked. The integrator's Wave 0 goes
-  in as a PR too.
+  plan. Push `main` **before** creating any ruleset: the rules reject the ref
+  update that creates the branch, and pausing them afterwards is exactly the
+  kind of action an automated session should not be allowed to take (build log,
+  2026-09-04).
+- Ruleset on `main`, created after the first push: pull request required
+  (0 approvals, solo), status check `verify` required, force-push and deletion
+  blocked. The integrator's Wave 0 goes in as a PR too.
 - Files: `README.md`, `LICENSE` (MIT unless told otherwise), `.gitignore`,
   `.github/workflows/ci.yml`, `.github/PULL_REQUEST_TEMPLATE.md`, `SECURITY.md`
   (short: key via env only, zero network in verify, audit log tamper-evident not

@@ -1,0 +1,67 @@
+# Lane briefs
+
+One file per lane, filled in from the template in
+`docs/plans/agent-team-build-strategy.md` §7. The integrator pastes the brief
+into the Agent launch and into the lane's GitHub issue as a comment.
+
+## Launching a wave
+
+Custom roles in `.claude/agents/` load when a session starts, so **launch each
+wave from a fresh session** (the Wave 0 build log records what happens
+otherwise). Then, for every lane in the wave, in one message:
+
+```
+Agent(subagent_type = lp-core | lp-logic | lp-build, name = "<lane>-<slug>",
+      isolation = worktree, run_in_background = true, prompt = <brief file>)
+```
+
+Concurrency caps: at most six lanes per wave, at most two `lp-core` lanes at once.
+
+## Before cutting worktrees
+
+- `git status` clean on `main`, `main` pushed, CI green.
+- `contract.py`, `types.py`, `scenarios.py` reflect every interface change
+  request accepted from the previous wave.
+- Research memos the wave depends on are merged.
+
+## Decisions carried into every Wave 1 and Wave 2 brief (from the Wave 0 research)
+
+- **Category identifiers are pinned to one Amazon.in fee-category node each**
+  (`contract.CATEGORY_NODES`): `electronics-accessories` → "Electronics
+  Accessories"; `home-kitchen` → "Kitchen - Cookware, Tableware & Dinnerware";
+  `apparel` → "Apparel - Shirts". Lanes B and C encode that node's own tiers,
+  never an umbrella (RS3 §1).
+- **Three 2026 fee effective dates exist**: March 16, June 10, September 7.
+  Rules carry validity windows; a batch's `as_of` selects the schedule in
+  force (RS3 §2, §3).
+- **The SAFE-T filing window is contradicted across secondary sources** (30,
+  60, 15 and a 50-day figure) and the primary page is login-walled (RS2 open
+  item 6). Lanes F and K each read the sources independently; where sources
+  disagree, both encode the **shortest** figure, mark it `verified: false`,
+  and record the alternatives (in the label rationale, in the rule docstring).
+  Same tie-break, independent readings.
+- **If the SAFE-T sources indicate fee overcharges (classes 1 and 2) are not
+  SAFE-T-shaped at all**, F and K say so in their reports instead of forcing a
+  label or rule. The integrator then decides whether `PRIMARY_MECHANISM` for
+  class 1 moves to support-ticket and the demo drills a class-5 claim instead.
+- **Refund fee terminology**: the India term is "Refund Commission"; the US
+  "Refund Administration Fee" is a different mechanism (RS3 §5). Cite the
+  India forum post RS3 names when the Help Hub page is login-walled.
+- **Statutory sources**: `incometaxindia.gov.in` and `pib.gov.in` are
+  bot-blocked; cite the Gazette of India Finance (No. 2) Act 2024 PDF for the
+  194-O change and the GST Council notifications for TCS (RS3 §6).
+- **Research lanes**: the browse daemon cannot bind a port inside the sandbox;
+  run browse commands with the sandbox disabled from the first call.
+
+## Closing a lane
+
+1. Read the lane report. Copy its "What broke" entries into `docs/build-log.md`.
+2. Push the worktree branch, open the PR with the template, `Closes #N`.
+3. Run `lp-reviewer` on the PR diff with the brief attached. Fix or push back.
+4. Merge `--no-ff`. Confirm `make lint && make verify` green on `main`.
+
+## Closing a wave
+
+Integration tests that span lanes (owned by the integrator), tag `wave-N`,
+build-log entries merged, interface change requests applied to the seams on
+`main` before the next wave's worktrees are cut.

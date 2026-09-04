@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The job name is the required status check in the `main` ruleset. Do not rename.
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install (locked, dev group only; verify needs no extras and no network)
+        run: uv sync --locked
+      - name: Lint
+        run: make lint
+      - name: Verify
+        run: make verify
+      - name: Upload outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-outputs
+          path: |
+            out/metrics.json
+            out/demo.html
+          if-no-files-found: ignore

@@ -112,6 +112,12 @@ settlement is the row-level match and the only one that feeds accuracy metrics.
   checked whether one is obtainable. Thirty minutes. If a real sample exists, the
   parser stops being tested only against data this project wrote, which is the
   difference between a demo and evidence.
+  *Resolved 2026-09-04 (research lane RS1, `docs/research/amazon-v2-sample.md`):
+  the premise was wrong. All five vendors publish documentation about the
+  format; none publishes a data file, and no redistributable sample exists on
+  GitHub or the seller forums. The 24-column layout is verified against four
+  independent sources instead. The parser remains tested only against data this
+  project writes; the README states it.*
 
 ## Premises *(unchanged)*
 
@@ -607,12 +613,21 @@ probabilistic language."
    one-week figure.
 2. Is a real Amazon V2 sample settlement file publicly obtainable? (Day 0, 30
    minutes. If yes, the parser round-trip stops being self-referential.)
+   *Closed 2026-09-04: no. Schema verified, no sample obtainable; see the
+   Constraints note and `docs/research/amazon-v2-sample.md`.*
 3. Verify SAFE-T India window arithmetic and exclusions on live policy pages. D14
    fallback applies if not reached.
+   *Status 2026-09-04 (RS2, `docs/research/safe-t.md`): not reached. The Help
+   Hub policy page is login-walled; secondary sources give four different
+   filing-window figures. D14 fallback applies; lanes F and K encode the
+   shortest figure, `verified: false`, alternatives recorded.*
 4. Evidence-requirements content per mechanism: the 2–3 winning claim examples
    (moved to day 0). Fallback if forum searching turns up nothing: template the
    drafter from cited policy text and mark it `verified: false`, exactly as D14
    does for rules.
+   *Status 2026-09-04 (RS2): two India-confirmed examples found, one a granted
+   claim with full structure, one an aggregate evidence-pattern case study; a
+   third not found. The drafter templates from these plus cited policy text.*
 5. **Open, unresolved:** the AI-visibility compliance gap (see Constraints), the
    post-freeze label-amendment procedure, and whether a baseline row belongs in
    the accuracy table.

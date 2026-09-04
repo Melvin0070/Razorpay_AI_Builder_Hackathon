@@ -1,0 +1,2021 @@
+{
+  "batch_id": "2026-08-W3",
+  "marketplace": "amazon-in",
+  "as_of": "2026-08-28",
+  "cycle_days": 7,
+  "coverage": {
+    "start": "2026-07-10",
+    "end": "2026-08-21"
+  },
+  "settlement_ids": [
+    "S-88228",
+    "S-88229",
+    "S-88230",
+    "S-88231"
+  ],
+  "order_count": 150,
+  "rupee_lines": {
+    "claim_ready": 1940000,
+    "blocked": 2160000,
+    "not_claimable": 623000,
+    "tax_review": 38000,
+    "unexplained": 197500,
+    "below_materiality": 21200,
+    "not_claimable_rule": 103000,
+    "not_claimable_window_expired": 231000,
+    "not_claimable_evidence_unobtainable": 289000,
+    "claim_ready_count": 7,
+    "blocked_count": 6,
+    "not_claimable_count": 4,
+    "tax_review_count": 1,
+    "unexplained_count": 2,
+    "below_materiality_rows": 18,
+    "identified": 4723000,
+    "total": 4979700
+  },
+  "match_rates": {
+    "total_orders": 150,
+    "matched": 141,
+    "class6_flagged": 6,
+    "quarantined_rows": 3,
+    "strict": 0.94,
+    "adjusted": 0.9791666666666666
+  },
+  "dispositions": {
+    "quarantine": 3,
+    "uncovered": 4,
+    "out_of_window": 2,
+    "config_error": 0,
+    "quarantine_reasons": [
+      {
+        "line_id": "settlement_2026-08-14.txt:812",
+        "reason": "amount not numeric: '1,240.00'"
+      },
+      {
+        "line_id": "settlement_2026-08-14.txt:813",
+        "reason": "expected 24 tab-separated columns, found 23"
+      },
+      {
+        "line_id": "orders_aug.csv:97",
+        "reason": "delivery_date before order_date"
+      }
+    ],
+    "hint": null
+  },
+  "rate_card_coverage": {
+    "categories": [
+      "electronics-accessories",
+      "home-kitchen",
+      "apparel"
+    ],
+    "valid_from": "2026-03-01",
+    "valid_to": null,
+    "audited_kinds": [
+      "commission",
+      "fixed-closing-fee",
+      "refund-admin-fee",
+      "fee-tax",
+      "tcs",
+      "tds"
+    ],
+    "acknowledged_kinds": [
+      "shipping-fee",
+      "promotion",
+      "reserve",
+      "safe-t-reimbursement"
+    ]
+  },
+  "queue": [
+    {
+      "finding": {
+        "error_class": 1,
+        "order_id": "171-8823391-4471214",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1204",
+          "orders_aug.csv:86",
+          "ratecard:v2026-03/home-kitchen/cookware"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1204",
+        "amount_paise": 124000,
+        "mechanism": "SAFE-T",
+        "basis": "commission 16.0% charged vs rate card 12.0% (Cookware, ≤ ₹35,000)",
+        "recomputation": [
+          {
+            "label": "charged 16.0%",
+            "amount_paise": -496000,
+            "note": ""
+          },
+          {
+            "label": "rate card 12.0%",
+            "amount_paise": -372000,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 124000,
+            "note": "GST on the fee delta follows the fee and is not claimed separately"
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-07-04",
+        "category_id": "home-kitchen",
+        "sku": "KTCH-PAN-28",
+        "finding_id": "171-8823391-4471214|1|settlement_2026-08-21.txt:1204"
+      },
+      "assessment": {
+        "finding_id": "171-8823391-4471214|1|settlement_2026-08-21.txt:1204",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-07-04",
+          "expires_on": "2026-09-02",
+          "days_left": 5,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "171-8823391-4471214|1|settlement_2026-08-21.txt:1204",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": {
+        "finding_id": "171-8823391-4471214|1|settlement_2026-08-21.txt:1204",
+        "template_text": "Commission was charged at a rate above the published Cookware rate (rate card v2026-03). Recomputation attached; the affected unit is on settlement #S-88231. Requesting an adjustment of {{amt:settlement_2026-08-21.txt:1204}} to the referral fee.",
+        "rendered_text": "Commission was charged at a rate above the published Cookware rate (rate card v2026-03). Recomputation attached; the affected unit is on settlement #S-88231. Requesting an adjustment of ₹1,240.00 to the referral fee.",
+        "magnitude": "moderate",
+        "model": "claude-sonnet-5",
+        "model_version": "2026-06-01",
+        "placeholders": [
+          "settlement_2026-08-21.txt:1204"
+        ]
+      },
+      "gate": {
+        "action": "approve",
+        "audit_seq": 118,
+        "state_before": "CLAIM-READY",
+        "artifact_path": "claims/E-042/",
+        "overridden": false
+      }
+    },
+    {
+      "finding": {
+        "error_class": 5,
+        "order_id": "403-2261950-9014402",
+        "source_line_ids": [
+          "settlement_2026-08-14.txt:644",
+          "orders_aug.csv:86"
+        ],
+        "claimed_line_id": "settlement_2026-08-14.txt:644",
+        "amount_paise": 498000,
+        "mechanism": "SAFE-T",
+        "basis": "refund posted 2026-07-06; no commission reversal in any later cycle",
+        "recomputation": [
+          {
+            "label": "commission on refunded units",
+            "amount_paise": -498000,
+            "note": ""
+          },
+          {
+            "label": "reversal received",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed",
+            "amount_paise": 498000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-07-06",
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-CBL-11",
+        "finding_id": "403-2261950-9014402|5|settlement_2026-08-14.txt:644"
+      },
+      "assessment": {
+        "finding_id": "403-2261950-9014402|5|settlement_2026-08-14.txt:644",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-07-06",
+          "expires_on": "2026-09-04",
+          "days_left": 7,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "403-2261950-9014402|5|settlement_2026-08-14.txt:644",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 1,
+        "order_id": "171-5568301-7723019",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1377",
+          "orders_aug.csv:119"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1377",
+        "amount_paise": 376000,
+        "mechanism": "SAFE-T",
+        "basis": "commission 20.0% charged vs rate card 12.0% (Apparel)",
+        "recomputation": [
+          {
+            "label": "charged 20.0%",
+            "amount_paise": -940000,
+            "note": ""
+          },
+          {
+            "label": "rate card 12.0%",
+            "amount_paise": -564000,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 376000,
+            "note": "GST on the fee delta follows the fee and is not claimed separately"
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-07-11",
+        "category_id": "apparel",
+        "sku": "APRL-JKT-04",
+        "finding_id": "171-5568301-7723019|1|settlement_2026-08-21.txt:1377"
+      },
+      "assessment": {
+        "finding_id": "171-5568301-7723019|1|settlement_2026-08-21.txt:1377",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-07-11",
+          "expires_on": "2026-09-09",
+          "days_left": 12,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "171-5568301-7723019|1|settlement_2026-08-21.txt:1377",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 5,
+        "order_id": "408-1176243-0089207",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1502",
+          "orders_aug.csv:104"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1502",
+        "amount_paise": 290000,
+        "mechanism": "SAFE-T",
+        "basis": "refund posted 2026-07-15; no commission reversal in any later cycle",
+        "recomputation": [
+          {
+            "label": "commission on refunded units",
+            "amount_paise": -290000,
+            "note": ""
+          },
+          {
+            "label": "reversal received",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed",
+            "amount_paise": 290000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-07-15",
+        "category_id": "home-kitchen",
+        "sku": "KTCH-KNF-07",
+        "finding_id": "408-1176243-0089207|5|settlement_2026-08-21.txt:1502"
+      },
+      "assessment": {
+        "finding_id": "408-1176243-0089207|5|settlement_2026-08-21.txt:1502",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-07-15",
+          "expires_on": "2026-09-13",
+          "days_left": 16,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "408-1176243-0089207|5|settlement_2026-08-21.txt:1502",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 6,
+        "order_id": "171-6620117-3348870",
+        "source_line_ids": [
+          "orders_aug.csv:93"
+        ],
+        "claimed_line_id": null,
+        "amount_paise": 315000,
+        "mechanism": "support-ticket",
+        "basis": "delivered 2026-07-14; absent from all four cycles, > 2 cycles after delivery",
+        "recomputation": [
+          {
+            "label": "expected net payout",
+            "amount_paise": 315000,
+            "note": ""
+          },
+          {
+            "label": "settled",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed",
+            "amount_paise": 315000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-HDP-02",
+        "finding_id": "171-6620117-3348870|6|-"
+      },
+      "assessment": {
+        "finding_id": "171-6620117-3348870|6|-",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Order + delivery confirmation",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Absence across cycles 21–24",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "support-ticket",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-6620117-3348870|6|-",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 2,
+        "order_id": "171-3095574-1200256",
+        "source_line_ids": [
+          "settlement_2026-08-07.txt:402",
+          "orders_aug.csv:124"
+        ],
+        "claimed_line_id": "settlement_2026-08-07.txt:402",
+        "amount_paise": 276000,
+        "mechanism": "support-ticket",
+        "basis": "closing fee ₹65 charged on 24 units priced in the ≤ ₹250 slab",
+        "recomputation": [
+          {
+            "label": "charged",
+            "amount_paise": -156000,
+            "note": "₹65 × 24"
+          },
+          {
+            "label": "rate card slab",
+            "amount_paise": 120000,
+            "note": "₹50 × 24"
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 276000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "apparel",
+        "sku": "APRL-SHO-19",
+        "finding_id": "171-3095574-1200256|2|settlement_2026-08-07.txt:402"
+      },
+      "assessment": {
+        "finding_id": "171-3095574-1200256|2|settlement_2026-08-07.txt:402",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "support-ticket",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-3095574-1200256|2|settlement_2026-08-07.txt:402",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 2,
+        "order_id": "171-0041877-2280091",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1261",
+          "orders_aug.csv:3"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1261",
+        "amount_paise": 61000,
+        "mechanism": "support-ticket",
+        "basis": "closing fee charged from the wrong slab",
+        "recomputation": [
+          {
+            "label": "charged",
+            "amount_paise": -100000,
+            "note": ""
+          },
+          {
+            "label": "rate card slab",
+            "amount_paise": -39000,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 61000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "home-kitchen",
+        "sku": "KTCH-JAR-12",
+        "finding_id": "171-0041877-2280091|2|settlement_2026-08-21.txt:1261"
+      },
+      "assessment": {
+        "finding_id": "171-0041877-2280091|2|settlement_2026-08-21.txt:1261",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "support-ticket",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-0041877-2280091|2|settlement_2026-08-21.txt:1261",
+        "state": "CLAIM-READY",
+        "precedence_step": 6,
+        "reason": "evidence complete",
+        "rupee_line": "claim-ready",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 1,
+        "order_id": "171-9088412-5560331",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1188",
+          "orders_aug.csv:70"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1188",
+        "amount_paise": 460000,
+        "mechanism": "SAFE-T",
+        "basis": "commission 15.0% charged vs rate card 12.0%",
+        "recomputation": [
+          {
+            "label": "charged 15.0%",
+            "amount_paise": -2299995,
+            "note": ""
+          },
+          {
+            "label": "rate card 12.0%",
+            "amount_paise": -1839996,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 460000,
+            "note": "GST on the fee delta follows the fee and is not claimed separately"
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-08-20",
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-SPK-09",
+        "finding_id": "171-9088412-5560331|1|settlement_2026-08-21.txt:1188"
+      },
+      "assessment": {
+        "finding_id": "171-9088412-5560331|1|settlement_2026-08-21.txt:1188",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "GST tax invoice",
+            "source": "seller-suppliable",
+            "status": "pending",
+            "source_line_ids": [],
+            "note": "requested from seller"
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-08-20",
+          "expires_on": "2026-10-19",
+          "days_left": 52,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "171-9088412-5560331|1|settlement_2026-08-21.txt:1188",
+        "state": "BLOCKED",
+        "precedence_step": 5,
+        "reason": "seller-action — GST tax invoice pending",
+        "rupee_line": "blocked",
+        "blocker_kind": "seller-action",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 5,
+        "order_id": "403-1150422-8817702",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1420",
+          "orders_aug.csv:22"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1420",
+        "amount_paise": 432000,
+        "mechanism": "SAFE-T",
+        "basis": "refund posted 2026-08-24; less than one full cycle before batch max settlement date",
+        "recomputation": [
+          {
+            "label": "commission on refunded units",
+            "amount_paise": -432000,
+            "note": ""
+          },
+          {
+            "label": "reversal received",
+            "amount_paise": 0,
+            "note": "cycle 3 not yet settled"
+          },
+          {
+            "label": "owed if unreversed",
+            "amount_paise": 432000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-08-24",
+        "category_id": "home-kitchen",
+        "sku": "KTCH-MIX-03",
+        "finding_id": "403-1150422-8817702|5|settlement_2026-08-21.txt:1420"
+      },
+      "assessment": {
+        "finding_id": "403-1150422-8817702|5|settlement_2026-08-21.txt:1420",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Reversal absent after one full cycle",
+            "source": "report-derivable",
+            "status": "pending",
+            "source_line_ids": [],
+            "note": "awaiting cycle 3"
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-08-24",
+          "expires_on": "2026-10-23",
+          "days_left": 56,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "403-1150422-8817702|5|settlement_2026-08-21.txt:1420",
+        "state": "BLOCKED",
+        "precedence_step": 5,
+        "reason": "timing — awaiting settlement cycle 3",
+        "rupee_line": "blocked",
+        "blocker_kind": "timing",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 5,
+        "order_id": "408-7741009-2036611",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1466",
+          "orders_aug.csv:68"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1466",
+        "amount_paise": 215000,
+        "mechanism": "SAFE-T",
+        "basis": "refund posted 2026-08-26; less than one full cycle before batch max settlement date",
+        "recomputation": [
+          {
+            "label": "commission on refunded units",
+            "amount_paise": -215000,
+            "note": ""
+          },
+          {
+            "label": "reversal received",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed if unreversed",
+            "amount_paise": 215000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-08-26",
+        "category_id": "apparel",
+        "sku": "APRL-TSH-31",
+        "finding_id": "408-7741009-2036611|5|settlement_2026-08-21.txt:1466"
+      },
+      "assessment": {
+        "finding_id": "408-7741009-2036611|5|settlement_2026-08-21.txt:1466",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Reversal absent after one full cycle",
+            "source": "report-derivable",
+            "status": "pending",
+            "source_line_ids": [],
+            "note": "awaiting cycle 3"
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-08-26",
+          "expires_on": "2026-10-25",
+          "days_left": 58,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "408-7741009-2036611|5|settlement_2026-08-21.txt:1466",
+        "state": "BLOCKED",
+        "precedence_step": 5,
+        "reason": "timing — awaiting settlement cycle 3",
+        "rupee_line": "blocked",
+        "blocker_kind": "timing",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 6,
+        "order_id": "171-7720931-4419233",
+        "source_line_ids": [
+          "orders_aug.csv:39"
+        ],
+        "claimed_line_id": null,
+        "amount_paise": 518000,
+        "mechanism": "support-ticket",
+        "basis": "delivered 2026-08-13; absent from cycles since, threshold of 2 cycles not yet reached",
+        "recomputation": [
+          {
+            "label": "expected net payout",
+            "amount_paise": 518000,
+            "note": ""
+          },
+          {
+            "label": "settled",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed if unpaid",
+            "amount_paise": 518000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-CAM-14",
+        "finding_id": "171-7720931-4419233|6|-"
+      },
+      "assessment": {
+        "finding_id": "171-7720931-4419233|6|-",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Order + delivery confirmation",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Absence > 2 cycles",
+            "source": "report-derivable",
+            "status": "pending",
+            "source_line_ids": [],
+            "note": "1 cycle so far"
+          }
+        ],
+        "deadline": {
+          "mechanism": "support-ticket",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-7720931-4419233|6|-",
+        "state": "BLOCKED",
+        "precedence_step": 5,
+        "reason": "timing — awaiting settlement cycle 2",
+        "rupee_line": "blocked",
+        "blocker_kind": "timing",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 6,
+        "order_id": "171-4480276-6671920",
+        "source_line_ids": [
+          "orders_aug.csv:60"
+        ],
+        "claimed_line_id": null,
+        "amount_paise": 390000,
+        "mechanism": "support-ticket",
+        "basis": "delivered 2026-08-15; threshold of 2 cycles not yet reached",
+        "recomputation": [
+          {
+            "label": "expected net payout",
+            "amount_paise": 390000,
+            "note": ""
+          },
+          {
+            "label": "settled",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed if unpaid",
+            "amount_paise": 390000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "home-kitchen",
+        "sku": "KTCH-PAN-30",
+        "finding_id": "171-4480276-6671920|6|-"
+      },
+      "assessment": {
+        "finding_id": "171-4480276-6671920|6|-",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Order + delivery confirmation",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Absence > 2 cycles",
+            "source": "report-derivable",
+            "status": "pending",
+            "source_line_ids": [],
+            "note": "1 cycle so far"
+          }
+        ],
+        "deadline": {
+          "mechanism": "support-ticket",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-4480276-6671920|6|-",
+        "state": "BLOCKED",
+        "precedence_step": 5,
+        "reason": "timing — awaiting settlement cycle 2",
+        "rupee_line": "blocked",
+        "blocker_kind": "timing",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 1,
+        "order_id": "171-2214590-9902118",
+        "source_line_ids": [
+          "settlement_2026-08-14.txt:713",
+          "orders_aug.csv:15"
+        ],
+        "claimed_line_id": "settlement_2026-08-14.txt:713",
+        "amount_paise": 145000,
+        "mechanism": "SAFE-T",
+        "basis": "commission 15.0% charged vs rate card 12.0%; no refund or return-scan date on any line",
+        "recomputation": [
+          {
+            "label": "charged 15.0%",
+            "amount_paise": -724995,
+            "note": ""
+          },
+          {
+            "label": "rate card 12.0%",
+            "amount_paise": -579996,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 145000,
+            "note": "GST on the fee delta follows the fee and is not claimed separately"
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "apparel",
+        "sku": "APRL-DRS-22",
+        "finding_id": "171-2214590-9902118|1|settlement_2026-08-14.txt:713"
+      },
+      "assessment": {
+        "finding_id": "171-2214590-9902118|1|settlement_2026-08-14.txt:713",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "start-date-missing",
+          "window_days": 60,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "171-2214590-9902118|1|settlement_2026-08-14.txt:713",
+        "state": "BLOCKED",
+        "precedence_step": 3,
+        "reason": "timing — window start date missing",
+        "rupee_line": "blocked",
+        "blocker_kind": "timing",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 7,
+        "order_id": "171-4362204-1188008",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1299",
+          "orders_aug.csv:41"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1299",
+        "amount_paise": 38000,
+        "mechanism": "CA-review",
+        "basis": "TCS withheld ₹1,380 vs 1% recompute ₹1,000 on taxable value ₹100,000",
+        "recomputation": [
+          {
+            "label": "TCS withheld",
+            "amount_paise": -138000,
+            "note": ""
+          },
+          {
+            "label": "Section 52 recompute at 1%",
+            "amount_paise": -100000,
+            "note": ""
+          },
+          {
+            "label": "difference",
+            "amount_paise": 38000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": null,
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-CHG-05",
+        "finding_id": "171-4362204-1188008|7|settlement_2026-08-21.txt:1299"
+      },
+      "assessment": {
+        "finding_id": "171-4362204-1188008|7|settlement_2026-08-21.txt:1299",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Settlement TCS lines",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "GSTR-2A / 8A reconciliation",
+            "source": "seller-suppliable",
+            "status": "pending",
+            "source_line_ids": [],
+            "note": "CA export"
+          }
+        ],
+        "deadline": {
+          "mechanism": "CA-review",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-4362204-1188008|7|settlement_2026-08-21.txt:1299",
+        "state": "BLOCKED",
+        "precedence_step": 0,
+        "reason": "professional-review — CA review",
+        "rupee_line": "tax-review",
+        "blocker_kind": "professional-review",
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 8,
+        "order_id": "171-9013380-4451127",
+        "source_line_ids": [
+          "settlement_2026-08-21.txt:1391",
+          "orders_aug.csv:133"
+        ],
+        "claimed_line_id": "settlement_2026-08-21.txt:1391",
+        "amount_paise": 134000,
+        "mechanism": "none",
+        "basis": "amount-description 'MISC-ADJ-7' under other-transaction is not in the vocabulary",
+        "recomputation": [
+          {
+            "label": "deduction",
+            "amount_paise": -134000,
+            "note": "MISC-ADJ-7"
+          }
+        ],
+        "unexplained_basis": "code-unseen",
+        "event_date": null,
+        "category_id": "home-kitchen",
+        "sku": "KTCH-BLD-01",
+        "finding_id": "171-9013380-4451127|8|settlement_2026-08-21.txt:1391"
+      },
+      "assessment": {
+        "finding_id": "171-9013380-4451127|8|settlement_2026-08-21.txt:1391",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Settlement row",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "none",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "171-9013380-4451127|8|settlement_2026-08-21.txt:1391",
+        "state": "UNEXPLAINED",
+        "precedence_step": 0,
+        "reason": "basis: code-unseen — MISC-ADJ-7 not in fee vocabulary",
+        "rupee_line": "unexplained",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 8,
+        "order_id": "408-0027741-6538800",
+        "source_line_ids": [
+          "settlement_2026-08-14.txt:690",
+          "orders_aug.csv:132"
+        ],
+        "claimed_line_id": "settlement_2026-08-14.txt:690",
+        "amount_paise": 63500,
+        "mechanism": "none",
+        "basis": "TechnologyFee is in the vocabulary; the rate card declares no rule and no acknowledgement for it",
+        "recomputation": [
+          {
+            "label": "deduction",
+            "amount_paise": -63500,
+            "note": "TechnologyFee"
+          }
+        ],
+        "unexplained_basis": "code-known-no-rule",
+        "event_date": null,
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-CBL-12",
+        "finding_id": "408-0027741-6538800|8|settlement_2026-08-14.txt:690"
+      },
+      "assessment": {
+        "finding_id": "408-0027741-6538800|8|settlement_2026-08-14.txt:690",
+        "eligibility": [],
+        "evidence": [
+          {
+            "requirement": "Settlement row",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "none",
+          "status": "not-applicable",
+          "window_days": null,
+          "starts_on": null,
+          "expires_on": null,
+          "days_left": null,
+          "citation": null
+        }
+      },
+      "state": {
+        "finding_id": "408-0027741-6538800|8|settlement_2026-08-14.txt:690",
+        "state": "UNEXPLAINED",
+        "precedence_step": 0,
+        "reason": "basis: code-known-no-rule — TechnologyFee has no rate-card rule",
+        "rupee_line": "unexplained",
+        "blocker_kind": null,
+        "not_claimable_reason": null
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 5,
+        "order_id": "408-5510028-3170455",
+        "source_line_ids": [
+          "settlement_2026-07-31.txt:112",
+          "orders_aug.csv:114"
+        ],
+        "claimed_line_id": "settlement_2026-07-31.txt:112",
+        "amount_paise": 110000,
+        "mechanism": "SAFE-T",
+        "basis": "refund posted 2026-06-16; no commission reversal in any later cycle",
+        "recomputation": [
+          {
+            "label": "commission on refunded units",
+            "amount_paise": -110000,
+            "note": ""
+          },
+          {
+            "label": "reversal received",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed",
+            "amount_paise": 110000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-06-16",
+        "category_id": "apparel",
+        "sku": "APRL-JNS-08",
+        "finding_id": "408-5510028-3170455|5|settlement_2026-07-31.txt:112"
+      },
+      "assessment": {
+        "finding_id": "408-5510028-3170455|5|settlement_2026-07-31.txt:112",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "expired",
+          "window_days": 60,
+          "starts_on": "2026-06-16",
+          "expires_on": "2026-08-15",
+          "days_left": null,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "408-5510028-3170455|5|settlement_2026-07-31.txt:112",
+        "state": "NOT-CLAIMABLE",
+        "precedence_step": 2,
+        "reason": "window expired 15 Aug — SAFE-T, 13 days ago",
+        "rupee_line": "not-claimable",
+        "blocker_kind": null,
+        "not_claimable_reason": "window-expired"
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 1,
+        "order_id": "171-3380044-2216065",
+        "source_line_ids": [
+          "settlement_2026-07-31.txt:140",
+          "orders_aug.csv:2"
+        ],
+        "claimed_line_id": "settlement_2026-07-31.txt:140",
+        "amount_paise": 121000,
+        "mechanism": "SAFE-T",
+        "basis": "commission 15.0% charged vs rate card 12.0%",
+        "recomputation": [
+          {
+            "label": "charged 15.0%",
+            "amount_paise": -604995,
+            "note": ""
+          },
+          {
+            "label": "rate card 12.0%",
+            "amount_paise": -483996,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 121000,
+            "note": "GST on the fee delta follows the fee and is not claimed separately"
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-06-22",
+        "category_id": "home-kitchen",
+        "sku": "KTCH-PAN-19",
+        "finding_id": "171-3380044-2216065|1|settlement_2026-07-31.txt:140"
+      },
+      "assessment": {
+        "finding_id": "171-3380044-2216065|1|settlement_2026-07-31.txt:140",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "expired",
+          "window_days": 60,
+          "starts_on": "2026-06-22",
+          "expires_on": "2026-08-21",
+          "days_left": null,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "171-3380044-2216065|1|settlement_2026-07-31.txt:140",
+        "state": "NOT-CLAIMABLE",
+        "precedence_step": 2,
+        "reason": "window expired 21 Aug — SAFE-T, 7 days ago",
+        "rupee_line": "not-claimable",
+        "blocker_kind": null,
+        "not_claimable_reason": "window-expired"
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 5,
+        "order_id": "403-6690123-7208814",
+        "source_line_ids": [
+          "settlement_2026-08-07.txt:455",
+          "orders_aug.csv:37"
+        ],
+        "claimed_line_id": "settlement_2026-08-07.txt:455",
+        "amount_paise": 103000,
+        "mechanism": "SAFE-T",
+        "basis": "A-to-z Guarantee refund posted 2026-08-01; no commission reversal since",
+        "recomputation": [
+          {
+            "label": "commission on refunded units",
+            "amount_paise": -103000,
+            "note": ""
+          },
+          {
+            "label": "reversal received",
+            "amount_paise": 0,
+            "note": ""
+          },
+          {
+            "label": "owed",
+            "amount_paise": 103000,
+            "note": ""
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-08-01",
+        "category_id": "electronics-accessories",
+        "sku": "ELEC-EAR-21",
+        "finding_id": "403-6690123-7208814|5|settlement_2026-08-07.txt:455"
+      },
+      "assessment": {
+        "finding_id": "403-6690123-7208814|5|settlement_2026-08-07.txt:455",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": false,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Not an A-to-z or seller-issued refund",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-08-01",
+          "expires_on": "2026-09-30",
+          "days_left": 33,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "403-6690123-7208814|5|settlement_2026-08-07.txt:455",
+        "state": "NOT-CLAIMABLE",
+        "precedence_step": 1,
+        "reason": "excluded by rule — A-to-z Guarantee refund (SAFET-01)",
+        "rupee_line": "not-claimable",
+        "blocker_kind": null,
+        "not_claimable_reason": "rule"
+      },
+      "draft": null,
+      "gate": null
+    },
+    {
+      "finding": {
+        "error_class": 1,
+        "order_id": "171-5560987-0110008",
+        "source_line_ids": [
+          "settlement_2026-08-14.txt:735",
+          "orders_aug.csv:37"
+        ],
+        "claimed_line_id": "settlement_2026-08-14.txt:735",
+        "amount_paise": 289000,
+        "mechanism": "SAFE-T",
+        "basis": "commission 15.0% charged vs rate card 12.0%",
+        "recomputation": [
+          {
+            "label": "charged 15.0%",
+            "amount_paise": -1444995,
+            "note": ""
+          },
+          {
+            "label": "rate card 12.0%",
+            "amount_paise": -1155996,
+            "note": ""
+          },
+          {
+            "label": "overcharge",
+            "amount_paise": 289000,
+            "note": "GST on the fee delta follows the fee and is not claimed separately"
+          }
+        ],
+        "unexplained_basis": null,
+        "event_date": "2026-08-03",
+        "category_id": "apparel",
+        "sku": "APRL-SAR-02",
+        "finding_id": "171-5560987-0110008|1|settlement_2026-08-14.txt:735"
+      },
+      "assessment": {
+        "finding_id": "171-5560987-0110008|1|settlement_2026-08-14.txt:735",
+        "eligibility": [
+          {
+            "rule_id": "SAFET-01",
+            "description": "Not an A-to-z Guarantee refund",
+            "passed": true,
+            "citation": {
+              "label": "A-to-z Guarantee exclusion",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G1781",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          },
+          {
+            "rule_id": "SAFET-02",
+            "description": "Not a seller-issued refund",
+            "passed": true,
+            "citation": {
+              "label": "SAFE-T policy (secondary source)",
+              "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+              "as_of": "2026-08-20",
+              "verified": false
+            }
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "Order + settlement row refs",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "Rate card citation, dated",
+            "source": "report-derivable",
+            "status": "satisfied",
+            "source_line_ids": [],
+            "note": ""
+          },
+          {
+            "requirement": "GST tax invoice",
+            "source": "unobtainable",
+            "status": "missing",
+            "source_line_ids": [],
+            "note": "seller_profile.gst_registered = false"
+          }
+        ],
+        "deadline": {
+          "mechanism": "SAFE-T",
+          "status": "open",
+          "window_days": 60,
+          "starts_on": "2026-08-03",
+          "expires_on": "2026-10-02",
+          "days_left": 35,
+          "citation": {
+            "label": "SAFE-T policy (secondary source)",
+            "url": "https://sellercentral.amazon.in/help/hub/reference/G200850160",
+            "as_of": "2026-08-20",
+            "verified": false
+          }
+        }
+      },
+      "state": {
+        "finding_id": "171-5560987-0110008|1|settlement_2026-08-14.txt:735",
+        "state": "NOT-CLAIMABLE",
+        "precedence_step": 4,
+        "reason": "evidence unobtainable — GST tax invoice, seller not GST-registered",
+        "rupee_line": "not-claimable",
+        "blocker_kind": null,
+        "not_claimable_reason": "evidence-unobtainable"
+      },
+      "draft": null,
+      "gate": null
+    }
+  ],
+  "generated_by": "tests/fixtures/build_demo_report.py (hand-authored fixture, not pipeline output)",
+  "mode": "static",
+  "schema_version": 1,
+  "bank_leg": {
+    "payouts": 4,
+    "matched": 4,
+    "unmatched_settlement_ids": [],
+    "duplicate_credit_utrs": []
+  },
+  "audit_head_seq": 118,
+  "audit_head_hash": "a41c9f2e7b0d4c6e8a1f3b5d7c9e0a2b4d6f8a0c2e4b6d8f0a1c3e5b7d9f1a3c"
+}
