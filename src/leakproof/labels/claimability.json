@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "authored_by": "lane F (claimability ground truth), wave 1, issue #9",
+  "authored_on": "2026-09-04",
+  "note": "Hand-authored against cited policy text BEFORE any eligibility rule exists in code (D12). Frozen at the wave 1 close; contract.FROZEN_LABELS_SHA256 records the SHA-256 of this file. Amending it takes ADR-0003. 'expected_precedence_step' is the design's own ladder label, so it is a string: the ladder has eight steps and the design names the second one '0b', which has no integer. labels/ladder.py maps it to the integer a StateResult carries.",
+  "window_tie_break": "Sources disagree on the SAFE-T filing window and the primary terms-and-conditions page is behind the Seller Central sign-in (confirmed: sellercentral.amazon.in/help/hub/reference/* redirects to /ap/signin). Per the standing wave decision the shortest figure is encoded and marked unverified. Figures found, all read directly this session: 15 calendar days from the date the refund was issued, stated as policy by two different India sellers in two Amazon.in forum threads, in both cases as the reason a claim was rejected; 30 days from 16 February 2026, cut from 60, stated by a vendor blog that attributes it to unread seller reporting on MyAmazonGuy and counts it 'from the return delivery scan or refund date, whichever is later'; and a 50-day figure that a third India seller describes as a reimbursement promise rather than a filing deadline. Shortest encoded: 15 calendar days from the refund date.",
+  "labels": [
+    {
+      "scenario": "C1_PLAIN",
+      "expected_state": "CLAIM-READY",
+      "expected_precedence_step": "6",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "Amazon.in's own seller blog describes the claim as filed per order ID, with eligibility checked at filing and the required documents attached at filing; nothing in that flow excludes this order, since the refund was not seller-issued, no A-to-z claim was granted, and every document the claim needs is either a settlement row or a tax invoice this GST-registered seller already holds. The window-start event is readable on a line, which is what separates this scenario from C1_WINDOW_DATE_MISSING, and it sits inside the filing window at as_of, which is what separates it from C1_WINDOW_EXPIRED. No step above 6 has anything to fire on, so this is the ladder's fall-through.",
+      "citation": {
+        "label": "Amazon.in Seller Blog: SAFE-T claims - here's how Easy Ship sellers can tackle in-transit/customer-damaged returns",
+        "url": "https://sell.amazon.in/seller-blog/here-is-how-easy-ship-sellers-can-file-safe-t-claims",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C1_WINDOW_EXPIRED",
+      "expected_state": "NOT-CLAIMABLE",
+      "expected_precedence_step": "2",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": "window-expired",
+      "rationale": "Two India sellers in two Amazon.in forum threads state the SAFE-T filing window as 15 days from the date the refund was issued, each reporting a rejection worded as filed outside the eligibility window; the primary terms-and-conditions page that would settle it is behind the Seller Central sign-in and was not read, so the shortest of the four conflicting figures is encoded and the citation is unverified (alternatives in this file's window_tie_break). No eligibility rule fails first, so the closed window is what decides this scenario, and the ladder emits that at step 2 rather than step 1.",
+      "citation": {
+        "label": "Amazon.in Seller Forums (India): sellers state a 15-day SAFE-T filing window running from the refund date",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/fcb1ab29-b320-4c5a-ad39-184438140db2",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C1_WINDOW_DATE_MISSING",
+      "expected_state": "BLOCKED",
+      "expected_precedence_step": "3",
+      "expected_blocker_kind": "timing",
+      "expected_not_claimable_reason": null,
+      "rationale": "Every SAFE-T window figure found runs from a dated event on the order, the refund issue date in both India forum reports, so with no such date on any line the window exists but cannot be computed. A window that cannot be computed is neither an expired one nor an absent one, and calling it either would bury a live claim or invent a deadline. The honest outcome is a timing blocker naming the missing start date, which is step 3.",
+      "citation": {
+        "label": "Amazon.in Seller Forums (India): sellers state a 15-day SAFE-T filing window running from the refund date",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/fcb1ab29-b320-4c5a-ad39-184438140db2",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C1_GST_UNREGISTERED",
+      "expected_state": "NOT-CLAIMABLE",
+      "expected_precedence_step": "4",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": "evidence-unobtainable",
+      "rationale": "Amazon.in's own selling FAQ answers 'Do I need GST number to sell on Amazon.in?' with yes for taxable goods and adds that a seller listing only GST-exempt categories may not need one, which is the same fact read the other way round: a seller whose profile says not registered holds no GSTIN and therefore cannot issue the GST tax invoice a fee claim is supported with. That document can never come into existence for this seller, which is a different thing from a document the seller has not sent yet. Unobtainable evidence is step 4, and it outranks the merely missing evidence of step 5.",
+      "citation": {
+        "label": "Amazon.in: frequently asked questions about selling on Amazon.in (GST details are mandatory for taxable goods)",
+        "url": "https://sell.amazon.in/sell-online/faq",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C1_ATOZ_EXCLUDED",
+      "expected_state": "NOT-CLAIMABLE",
+      "expected_precedence_step": "1",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": "rule",
+      "rationale": "The one Amazon-staff-authored eligible/ineligible list found for SAFE-T states plainly that a claim is not eligible when an A-to-z claim was granted, and Amazon.in's public A-to-z page corroborates why: a granted A-to-z refund is Amazon's own adjudication of the order in the buyer's favour, so there is nothing left for the seller to appeal through SAFE-T. That staff thread renders with a United States country banner, confirmed on load this session, so its applicability to Amazon.in is unconfirmed and the citation is unverified; no India-specific page stating the exclusions was reachable. A failing eligibility rule is step 1, which sits above the window arithmetic, so this stays not-claimable even while the filing window is still open.",
+      "citation": {
+        "label": "Amazon Seller Forums (rendered with a United States country banner): SAFE-T eligible and ineligible reason list, Amazon staff authored",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/caf6f9f1-5f82-4379-8c80-95b83aa3eb23",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C1_SELLER_REFUND_EXCLUDED",
+      "expected_state": "NOT-CLAIMABLE",
+      "expected_precedence_step": "1",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": "rule",
+      "rationale": "The same staff-authored list states that a claim is not eligible when the seller issued the refund, which is the exclusion premise P3 is built on: a refund the seller chose to give is not a loss Amazon assured. Region applicability is unconfirmed for the reason recorded on the A-to-z exclusion above, so the citation is unverified. It is an eligibility rule rather than a window or evidence question, so it decides the scenario at step 1.",
+      "citation": {
+        "label": "Amazon Seller Forums (rendered with a United States country banner): SAFE-T eligible and ineligible reason list, Amazon staff authored",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/caf6f9f1-5f82-4379-8c80-95b83aa3eb23",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C1_INVOICE_PENDING",
+      "expected_state": "BLOCKED",
+      "expected_precedence_step": "5",
+      "expected_blocker_kind": "seller-action",
+      "expected_not_claimable_reason": null,
+      "rationale": "This seller holds the GST registration Amazon.in requires of anyone listing taxable goods, so the tax invoice the claim needs is a document that exists and can be produced; it simply has not been supplied to the claim yet. Evidence that is obtainable but not yet in hand is missing, not unobtainable, which keeps this off step 4 and puts it on step 5. The blocker is the seller's own action, and naming that item on screen is what makes the state actionable instead of a verdict.",
+      "citation": {
+        "label": "Amazon.in: frequently asked questions about selling on Amazon.in (GST details are mandatory for taxable goods)",
+        "url": "https://sell.amazon.in/sell-online/faq",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C2_PLAIN",
+      "expected_state": "CLAIM-READY",
+      "expected_precedence_step": "6",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "A closing fee charged from the wrong slab is a fee dispute, and the route Amazon.in publishes for a seller with an issue to resolve is a case to Amazon Seller Support through Seller Central, which is the mechanism the contract records for this class; that page publishes no filing deadline, so steps 2 and 3 have nothing to evaluate. The whole case is carried by the settlement rows themselves plus the published fee schedule, both report-derivable, so steps 4 and 5 find nothing missing either. That leaves the fall-through, step 6.",
+      "citation": {
+        "label": "Amazon.in: Help and Support whenever you need it (Amazon Seller Support is contacted via Seller Central to have issues resolved)",
+        "url": "https://sell.amazon.in/sell-online/help/",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C2_SLAB_BOUNDARY",
+      "expected_state": "CLAIM-READY",
+      "expected_precedence_step": "6",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "An order priced exactly on a slab boundary is a harder arithmetic problem for the detector, not a different claimability question: nothing in the Seller Support route treats a boundary order differently, and no eligibility rule, window or evidence item changes. Labelling it anything other than its plain sibling would smuggle a detection difficulty into the ground truth for claimability. It therefore lands at step 6 exactly as C2_PLAIN does.",
+      "citation": {
+        "label": "Amazon.in: Help and Support whenever you need it (Amazon Seller Support is contacted via Seller Central to have issues resolved)",
+        "url": "https://sell.amazon.in/sell-online/help/",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C5_PLAIN",
+      "expected_state": "CLAIM-READY",
+      "expected_precedence_step": "6",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "A refund on which the commission was never given back is the loss shape SAFE-T is described for on Amazon.in, the refund was neither seller-issued nor the result of a granted A-to-z claim, and the refund date that starts the filing window is on the settlement line itself. A full cycle has passed since that refund, so the reversal is late rather than merely unsettled, and every document the claim needs is a row in the batch. The label holds only while that refund date is still inside the filing window at as_of; no seeded scenario covers the expired variant of class 5, so the generator must keep C5_PLAIN inside the window.",
+      "citation": {
+        "label": "Amazon.in Seller Blog: SAFE-T claims - here's how Easy Ship sellers can tackle in-transit/customer-damaged returns",
+        "url": "https://sell.amazon.in/seller-blog/here-is-how-easy-ship-sellers-can-file-safe-t-claims",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C5_AWAITING_CYCLE",
+      "expected_state": "BLOCKED",
+      "expected_precedence_step": "5",
+      "expected_blocker_kind": "timing",
+      "expected_not_claimable_reason": null,
+      "rationale": "Amazon.in states that a SAFE-T claim is filed at order level and that a second claim cannot be filed on the same order ID, so filing before the next settlement cycle has had its chance to carry the reversal spends the single claim this order will ever get. The reversal line is therefore pending rather than absent, which is a required evidence item with a named cycle to wait for. Step 5 emits that as a blocker, and the blocker kind is timing because nobody has an action to take except wait; step 3 does not apply, since the window's start date is readable.",
+      "citation": {
+        "label": "Amazon.in Seller Blog: SAFE-T claims - a claim is filed at order level and multiple claims cannot be filed on the same order ID",
+        "url": "https://sell.amazon.in/seller-blog/here-is-how-easy-ship-sellers-can-file-safe-t-claims",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C5_SELLER_ISSUED",
+      "expected_state": "NOT-CLAIMABLE",
+      "expected_precedence_step": "1",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": "rule",
+      "rationale": "The staff-authored eligible and ineligible list states that a SAFE-T claim is not eligible when the seller issued the refund, and this is the naive-detector trap the design calls out: a refund with no fee reversal looks identical whoever issued it. Region applicability is unconfirmed because the thread carries a United States country banner and the Amazon.in policy page is behind the sign-in, so the citation is unverified. The rule fails outright, which is step 1, above both the window and the evidence steps.",
+      "citation": {
+        "label": "Amazon Seller Forums (rendered with a United States country banner): SAFE-T eligible and ineligible reason list, Amazon staff authored",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/caf6f9f1-5f82-4379-8c80-95b83aa3eb23",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C5_ATOZ",
+      "expected_state": "NOT-CLAIMABLE",
+      "expected_precedence_step": "1",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": "rule",
+      "rationale": "The same list states that a claim is not eligible when an A-to-z claim was granted, and Amazon.in's public A-to-z page confirms that a granted claim is an adjudication Amazon has already made on the order in the buyer's favour. A missing fee reversal on such an order is real money, but it is not money SAFE-T will return. The failing eligibility rule decides it at step 1, and the amount still has to be reported under not-claimable rather than dropped.",
+      "citation": {
+        "label": "Amazon Seller Forums (rendered with a United States country banner): SAFE-T eligible and ineligible reason list, Amazon staff authored",
+        "url": "https://sellercentral.amazon.in/seller-forums/discussions/t/caf6f9f1-5f82-4379-8c80-95b83aa3eb23",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C6_PLAIN",
+      "expected_state": "CLAIM-READY",
+      "expected_precedence_step": "6",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "A delivered order that never appears in any settlement is not a return-related loss, so it is not the shape SAFE-T is described for; the route Amazon.in publishes for it is a case to Amazon Seller Support, and that page states no filing deadline, so the window steps have nothing to evaluate. The evidence is the seller's own order export row plus the demonstrated absence of the order across every settlement file in the batch, both report-derivable and both already in hand. Nothing above it fires, so it falls through to step 6.",
+      "citation": {
+        "label": "Amazon.in: Help and Support whenever you need it (Amazon Seller Support is contacted via Seller Central to have issues resolved)",
+        "url": "https://sell.amazon.in/sell-online/help/",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C7_TCS_MISMATCH",
+      "expected_state": "BLOCKED",
+      "expected_precedence_step": "0b",
+      "expected_blocker_kind": "professional-review",
+      "expected_not_claimable_reason": null,
+      "rationale": "Section 52 of the CGST Act makes the marketplace an operator collecting tax at source and, in sub-sections 8 to 11, sends any discrepancy between the operator's statement and the supplier's own return down a statutory route: it is communicated to both parties and, unresolved, added to the supplier's output tax liability with interest. A TCS mismatch is therefore a matter for the seller's GST filings and their tax professional, never a claim this agent files, which is why the mechanism is CA-review. The design makes CA-review terminate at step 0b so class 7 can never reach claim-ready by construction; the amount still reports, under the tax-review rupee line.",
+      "citation": {
+        "label": "CBIC Tax Information Portal: Central Goods and Services Tax Act 2017, section 52 (collection of tax at source; discrepancy route in sub-sections 8-11)",
+        "url": "https://taxinformation.cbic.gov.in/content/html/tax_repository/gst/acts/2017_CGST_act/active/chapter10/section52_v1.00.html",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C7_TDS_MISMATCH",
+      "expected_state": "BLOCKED",
+      "expected_precedence_step": "0b",
+      "expected_blocker_kind": "professional-review",
+      "expected_not_claimable_reason": null,
+      "rationale": "Section 194-O makes the marketplace deduct income tax at source on the seller's gross sales, and the credit for that deduction is claimed in the seller's own income-tax return, so a recompute disagreement is settled with the tax authority and not with Amazon. The statutory text itself could not be read: incometaxindia.gov.in and indiacode.nic.in both returned HTTP 403 to this session's browser and to a second client, so the citation is unverified; the reachable corroboration is Amazon.in's own tax FAQ, which answers seller tax questions by directing the seller to their tax consultant. CA-review is therefore the mechanism and step 0b takes it before any eligibility, window or evidence question is asked.",
+      "citation": {
+        "label": "Income Tax Department: section 194-O (TDS on payments by an e-commerce operator to an e-commerce participant) - HTTP 403 to this session, not read",
+        "url": "https://www.incometaxindia.gov.in/w/section-194-o",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "scenario": "C8_CODE_UNSEEN",
+      "expected_state": "UNEXPLAINED",
+      "expected_precedence_step": "0",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "Amazon.in's filing flow requires the seller to select a reason code before a claim can be submitted, and a deduction posted under an amount-description nobody has a meaning for cannot be given one honestly. With no mechanism there is nothing to be eligible for and no window to compute, so the ladder stops at step 0 and the basis label, code-unseen, is the whole explanation. The money is still reported, under the unexplained rupee line and never inside identified.",
+      "citation": {
+        "label": "Amazon.in Seller Blog: SAFE-T claims - filing requires selecting the reason code and attaching the required documents",
+        "url": "https://sell.amazon.in/seller-blog/here-is-how-easy-ship-sellers-can-file-safe-t-claims",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    },
+    {
+      "scenario": "C8_CODE_KNOWN_NO_RULE",
+      "expected_state": "UNEXPLAINED",
+      "expected_precedence_step": "0",
+      "expected_blocker_kind": null,
+      "expected_not_claimable_reason": null,
+      "rationale": "Recognising the code is not the same as being able to say the charge was wrong: with no audited rule and no acknowledgement for that kind there is no basis on which to compute a discrepancy, and so no reason code a claim could be filed under. The state is the same as for an unseen code and the basis label is what separates them, which is why the design makes the basis the explanation rather than a confidence number. Step 0 again, and the amount reports under unexplained.",
+      "citation": {
+        "label": "Amazon.in Seller Blog: SAFE-T claims - filing requires selecting the reason code and attaching the required documents",
+        "url": "https://sell.amazon.in/seller-blog/here-is-how-easy-ship-sellers-can-file-safe-t-claims",
+        "as_of": "2026-09-04",
+        "verified": true
+      }
+    }
+  ]
+}
