@@ -9,12 +9,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from leakproof.dashboard.template import render_page
+from leakproof.serialize import dumps
 from leakproof.types import BatchReport
 
 
 def render(report: BatchReport, *, mode: str) -> str:
-    raise NotImplementedError("lane G, issue #10")
+    """Full HTML, no external resources of any kind (D16). ``mode`` is
+    ``"static"`` (no buttons; an already-gated row shows its result block) or
+    ``"served"`` (live approve/override/reject/flag buttons calling
+    ``leakproof.gate.*`` through ``dashboard/serve.py``). Everything above the
+    ``<!-- gate -->`` marker in each row's detail pane renders identically in
+    both modes."""
+    return render_page(report, mode=mode)
 
 
 def write_demo_html(report: BatchReport, path: Path) -> None:
-    raise NotImplementedError("lane G, issue #10")
+    """``make demo``: static-mode HTML with the report JSON inlined in a
+    ``<script type="application/json">`` block, so ``demo.html`` is both the
+    self-contained keyless viewer and a record of the exact data it rendered
+    from."""
+    html = render(report, mode="static")
+    # Defensive: a citation URL or drafted-claim quote could in principle contain
+    # the literal string "</script>", which would terminate the block early.
+    safe_json = dumps(report).replace("</script", "<\\/script")
+    data_block = f'<script type="application/json" id="report-data">{safe_json}</script>\n'
+    path.write_text(html + data_block, encoding="utf-8")
