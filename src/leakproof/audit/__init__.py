@@ -33,6 +33,19 @@ truncates. Reopening an existing log (a fresh ``AuditLog`` instance pointing
 at the same path) picks its next ``seq``/``prev_hash`` up from whatever is
 on disk, so there is no in-memory state to lose between runs.
 
+Single writer, always. This module assumes exactly one process appends to a
+given log path at a time (the CLI, or the served gate, but never both at
+once) and does no locking to enforce that. There is no atomicity between
+``head()``'s read and ``append()``'s write, so two writers racing produce two
+entries with the same ``seq`` and ``prev_hash`` — a real failure, but one
+``verify_chain`` reports as a duplicate/out-of-order ``seq`` rather than one
+this module prevents at write time. ``head()`` is defined as "the last
+physical line", not "the entry with the highest ``seq``": under the
+single-writer assumption those always agree, but a second writer that
+appended out of turn would make them disagree, and ``verify_chain`` — not
+``append`` — is what catches a reorder like that, by recomputing the whole
+chain rather than trusting whichever entry happens to be last on disk.
+
 SECURITY.md is explicit that this makes the log tamper-*evident*, not
 tamper-*proof*: anyone with write access to the file can rewrite an entry and
 re-chain everything after it by hand. Verification catches an edit that was
