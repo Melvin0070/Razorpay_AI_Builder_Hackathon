@@ -16,8 +16,15 @@ from hypothesis import strategies as st
 from leakproof.audit import AuditLog, verify_chain
 from leakproof.contract import AuditAction, State
 
+# Category Cs is lone surrogates: canonical_json rejects a string containing
+# one with a specific ValueError (F10; see test_lone_surrogate_actor in
+# test_chain.py), which is not the failure mode this property test is
+# exploring, so they are excluded here rather than turned into 30 copies of
+# the same already-covered rejection. No max_codepoint cap: the rest of the
+# Unicode range (including astral/non-BMP characters) is exactly what a
+# canonicalisation bug would plausibly mishandle, so it stays in scope.
 _ACTORS = st.text(
-    alphabet=st.characters(blacklist_categories=("Cs",), max_codepoint=0x2FFF),
+    alphabet=st.characters(blacklist_categories=("Cs",)),
     min_size=1,
     max_size=20,
 )
@@ -40,6 +47,10 @@ _ENTRY_KWARGS = st.fixed_dictionaries(
 
 @settings(
     max_examples=30,
+    # append() does a real os.fsync() per call, and this test does up to 8
+    # appends per example; fsync latency is disk/CI-dependent enough that a
+    # wall-clock per-example deadline produces flaky failures unrelated to
+    # correctness.
     deadline=None,
     suppress_health_check=[HealthCheck.function_scoped_fixture],
 )

@@ -3,6 +3,8 @@ reopen, and the recompute-not-compare property (D21)."""
 
 from __future__ import annotations
 
+import pytest
+
 from leakproof.audit import AuditLog, audit_chain_gate, verify_chain
 from leakproof.contract import AuditAction
 from tests.audit.conftest import append_sample
@@ -141,6 +143,18 @@ def test_next_seq_on_empty_log_is_one_and_matches_append(tmp_path):
     e2 = append_sample(log, "2026-08-21T10:00:01Z")
     assert e2.seq == 2
     assert log.next_seq() == 3
+
+
+def test_lone_surrogate_actor_raises_value_error_not_unicode_error(tmp_path):
+    """F10: append(actor="\\ud800") used to crash with a bare
+    UnicodeEncodeError from deep inside .encode("utf-8"); it must now raise
+    a clear ValueError instead."""
+    path = tmp_path / "audit.jsonl"
+    log = AuditLog(path)
+    with pytest.raises(ValueError, match="not valid UTF-8"):
+        append_sample(log, "2026-08-21T10:00:00Z", actor="\ud800")
+    # nothing was written: the failure happens before the file is touched
+    assert not path.exists()
 
 
 def test_gate_passes_with_no_log_file(tmp_path):

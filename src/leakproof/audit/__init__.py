@@ -188,7 +188,21 @@ def canonical_json(entry: AuditEntry) -> str:
     approximating it."""
     payload = _project(entry)
     payload.pop("hash", None)
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        # A lone surrogate (e.g. actor="\ud800", half of a split UTF-16
+        # pair with no partner) round-trips fine through json.dumps with
+        # ensure_ascii=False, since json's encoder does not validate
+        # surrogate pairing, but cannot be encoded to bytes to be hashed or
+        # written to disk. Fail loudly and specifically here rather than
+        # letting a bare UnicodeEncodeError escape from deep inside append().
+        raise ValueError(
+            "audit entry contains text that is not valid UTF-8 (a lone "
+            "surrogate code point) and cannot be hashed"
+        ) from exc
+    return text
 
 
 def compute_hash(entry: AuditEntry, prev_hash: str) -> str:
