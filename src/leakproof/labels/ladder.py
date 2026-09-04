@@ -87,7 +87,9 @@ def check_combination(
             raise LadderError(f"{where}: BLOCKED without a blocker kind")
         fixed = STEP_BLOCKER_KIND.get(step)
         if fixed is not None and blocker_kind is not fixed:
-            raise LadderError(f"{where}: step {step} blocks with {fixed}, label says {blocker_kind}")
+            raise LadderError(
+                f"{where}: step {step} blocks with {fixed}, label says {blocker_kind}"
+            )
     elif blocker_kind is not None:
         raise LadderError(f"{where}: {state} carries no blocker kind, label says {blocker_kind}")
 
