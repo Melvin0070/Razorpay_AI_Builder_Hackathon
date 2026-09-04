@@ -384,21 +384,28 @@ def verify_chain(path: Path, artifacts_root: Path | None = None) -> ChainVerific
                 )
         prev_hash = entry.hash
         expected_seq += 1
-    return ChainVerification(
-        ok=True, entries=len(entries), first_bad_seq=None, detail="chain verified"
-    )
+    detail = f"{len(entries)} entries verified"
+    if artifacts_root is None:
+        # A passing result must never claim a check it did not run: without
+        # artifacts_root, no entry's artifact_path was checked against disk
+        # at all, so orphan packs would sail through silently if this said
+        # only "N entries verified" (which reads as everything was checked).
+        detail += "; artifact paths not checked"
+    return ChainVerification(ok=True, entries=len(entries), first_bad_seq=None, detail=detail)
 
 
-def audit_chain_gate(path: Path, artifacts_root: Path | None = None) -> GateResult:
+def audit_chain_gate(path: Path, artifacts_root: Path) -> GateResult:
     """``GateResult`` wrapper around ``verify_chain`` for registration in
     ``gates.HARD_GATES`` (the integrator binds ``path``/``artifacts_root``
-    at merge time, since ``Gate`` callables take no arguments). An absent
-    log file passes: nothing has been audited yet, so there is nothing to
-    fail on.
+    at merge time, since ``Gate`` callables take no arguments). ``artifacts_root``
+    is required (unlike ``verify_chain``'s optional one): a gate registered
+    without it would report "N entries verified" forever while never
+    catching an orphan pack, since the wording alone does not tell a reader
+    which check ran. An absent log file passes: nothing has been audited
+    yet, so there is nothing to fail on.
     """
     path = Path(path)
     if not path.exists():
         return GateResult(name="audit-chain", ok=True, detail="no audit log yet")
     result = verify_chain(path, artifacts_root)
-    detail = result.detail if not result.ok else f"{result.entries} entries verified"
-    return GateResult(name="audit-chain", ok=result.ok, detail=detail)
+    return GateResult(name="audit-chain", ok=result.ok, detail=result.detail)

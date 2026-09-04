@@ -31,6 +31,21 @@ def test_append_three_hashes_differ_and_prev_hash_links(tmp_path):
     assert log.head() == e3
 
 
+def test_verify_ok_detail_says_artifact_paths_not_checked_without_root(tmp_path):
+    """F2: a passing result must never claim a check it did not run."""
+    path = tmp_path / "audit.jsonl"
+    log = AuditLog(path)
+    append_sample(log, "2026-08-21T10:00:00Z")
+
+    without_root = verify_chain(path)
+    assert without_root.ok
+    assert without_root.detail == "1 entries verified; artifact paths not checked"
+
+    with_root = verify_chain(path, artifacts_root=tmp_path / "artifacts")
+    assert with_root.ok
+    assert with_root.detail == "1 entries verified"
+
+
 def test_verify_missing_file_is_ok_empty_chain(tmp_path):
     result = verify_chain(tmp_path / "does-not-exist.jsonl")
     assert result.ok
@@ -128,7 +143,7 @@ def test_gate_fails_when_chain_is_broken(tmp_path):
     lines = path.read_text(encoding="utf-8").splitlines()
     path.write_text(lines[0].replace('"system"', '"tampered"') + "\n", encoding="utf-8")
 
-    result = audit_chain_gate(path)
+    result = audit_chain_gate(path, tmp_path / "artifacts")
     assert not result.ok
     assert "hash mismatch" in result.detail
 
@@ -139,6 +154,6 @@ def test_gate_passes_on_a_clean_chain(tmp_path):
     append_sample(log, "2026-08-21T10:00:00Z")
     append_sample(log, "2026-08-21T10:00:01Z")
 
-    result = audit_chain_gate(path)
+    result = audit_chain_gate(path, tmp_path / "artifacts")
     assert result.ok
     assert result.detail == "2 entries verified"
