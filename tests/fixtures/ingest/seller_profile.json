@@ -1,0 +1,18 @@
+{
+  "seller_id": "SELLER-001",
+  "display_name": "Test Seller Pvt Ltd",
+  "capabilities": [
+    {
+      "name": "gst_registered",
+      "holds": true,
+      "valid_from": "2026-01-01",
+      "valid_to": null
+    },
+    {
+      "name": "safe_t_enrolled",
+      "holds": false,
+      "valid_from": "2025-06-01",
+      "valid_to": "2026-05-31"
+    }
+  ]
+}

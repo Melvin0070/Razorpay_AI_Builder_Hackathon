@@ -1,0 +1,4 @@
+order_id,sku,category_id,quantity,principal_paise,tax_paise,order_date,delivery_date,refund_initiated_by
+ORD-1,SKU-1,electronics-accessories,1,50000,2500,2026-08-10,2026-08-15,none
+ORD-2,SKU-2,home-kitchen,2,120000,6000,2026-08-11,,none
+ORD-3,SKU-3,apparel,1,30000,1500,2026-08-12,2026-08-18,seller

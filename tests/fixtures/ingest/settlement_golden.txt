@@ -1,0 +1,4 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+S-1000	2026-08-14	2026-08-20	2026-08-21	1234.50	INR																		
+S-1000						Order	ORD-1	MO-1			Amazon.in	ItemPrice	Principal	500.00		2026-08-15					SKU-1	1	
+S-1000						Refund	ORD-2	MO-2			Amazon.in	ItemFees	Commission	-75.00		2026-08-16					SKU-2		
