@@ -137,6 +137,10 @@ class SettlementLine:
     sku: str | None = None
     quantity: int | None = None
     adjustment_id: str | None = None
+    # transaction-type is an open vocabulary too (RS1 found `Order_Retrocharge`
+    # in a real file), so the raw string is kept beside the enum, same as
+    # amount-description.
+    transaction_type_raw: str = ""
 
 
 @dataclass(frozen=True, slots=True)

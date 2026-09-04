@@ -324,11 +324,16 @@ def rupee_line_for(error_class: ErrorClass, state: State) -> RupeeLine:
 
 
 class TransactionType(StrEnum):
+    """An open vocabulary (RS1 saw ``Order_Retrocharge`` in a real file), so
+    ``OTHER`` is a real outcome and the raw string is kept on the line."""
+
     ORDER = "Order"
     REFUND = "Refund"
     CHARGEBACK_REFUND = "Chargeback Refund"
     ATOZ_REFUND = "A-to-z Guarantee Refund"
     ADJUSTMENT = "Adjustment"
+    SERVICE_FEE = "ServiceFee"
+    ORDER_RETROCHARGE = "Order_Retrocharge"
     TRANSFER = "Transfer"
     SAFET_REIMBURSEMENT = "SAFE-T Reimbursement"
     OTHER = "other"
@@ -347,6 +352,12 @@ class LineKind(StrEnum):
     COMMISSION = "commission"
     FIXED_CLOSING_FEE = "fixed-closing-fee"
     SHIPPING_FEE = "shipping-fee"
+    FULFILMENT_FEE = "fulfilment-fee"
+    STORAGE_FEE = "storage-fee"
+    GIFT_WRAP = "gift-wrap"
+    GOODWILL = "goodwill"
+    RESTOCKING_FEE = "restocking-fee"
+    MARKETPLACE_FACILITATOR_TAX = "marketplace-facilitator-tax"
     REFUND_ADMIN_FEE = "refund-admin-fee"
     TECHNOLOGY_FEE = "technology-fee"
     FEE_TAX = "fee-tax"
@@ -367,16 +378,30 @@ LINE_VOCABULARY: Final[dict[tuple[str, str], LineKind]] = {
     ("ItemPrice", "Tax"): LineKind.ITEM_TAX,
     ("ItemPrice", "Shipping"): LineKind.SHIPPING_CHARGE,
     ("ItemPrice", "ShippingTax"): LineKind.SHIPPING_CHARGE_TAX,
+    ("ItemPrice", "GiftWrap"): LineKind.GIFT_WRAP,
+    ("ItemPrice", "Goodwill"): LineKind.GOODWILL,
+    ("ItemPrice", "RestockingFee"): LineKind.RESTOCKING_FEE,
     ("ItemFees", "Commission"): LineKind.COMMISSION,
     ("ItemFees", "FixedClosingFee"): LineKind.FIXED_CLOSING_FEE,
     ("ItemFees", "ShippingChargeback"): LineKind.SHIPPING_FEE,
     ("ItemFees", "RefundCommission"): LineKind.REFUND_ADMIN_FEE,
+    ("ItemFees", "FBAPerUnitFulfillmentFee"): LineKind.FULFILMENT_FEE,
+    ("ItemFees", "FBAWeightBasedFee"): LineKind.FULFILMENT_FEE,
+    ("ItemFees", "FBAPerOrderFulfillmentFee"): LineKind.FULFILMENT_FEE,
+    ("ItemFees", "GiftwrapChargeback"): LineKind.GIFT_WRAP,
+    ("ItemFees", "StorageFee"): LineKind.STORAGE_FEE,
+    ("ItemFees", "LongTermStorageFee"): LineKind.STORAGE_FEE,
     ("ItemFees", "TechnologyFee"): LineKind.TECHNOLOGY_FEE,
     ("ItemFees", "TaxOnFees"): LineKind.FEE_TAX,
     ("ItemWithheldTax", "TCS-CGST"): LineKind.TCS,
     ("ItemWithheldTax", "TCS-SGST"): LineKind.TCS,
     ("ItemWithheldTax", "TCS-IGST"): LineKind.TCS,
     ("ItemWithheldTax", "TDS (Section 194-O)"): LineKind.TDS,
+    (
+        "ItemWithheldTax",
+        "MarketplaceFacilitatorTax-Principal",
+    ): LineKind.MARKETPLACE_FACILITATOR_TAX,
+    ("ItemWithheldTax", "MarketplaceFacilitatorTax-Shipping"): LineKind.MARKETPLACE_FACILITATOR_TAX,
     ("other-transaction", "Current Reserve Amount"): LineKind.RESERVE,
     ("other-transaction", "Previous Reserve Amount Balance"): LineKind.RESERVE,
     ("other-transaction", "SAFE-T Reimbursement"): LineKind.SAFET_REIMBURSEMENT,
@@ -391,18 +416,49 @@ TRANSACTION_VOCABULARY: Final[dict[str, TransactionType]] = {
     t.value: t for t in TransactionType if t is not TransactionType.OTHER
 }
 
+# Sources disagree on casing (`Other-Transaction` vs `other-transaction`, RS1),
+# so every lookup case-folds. The tables above keep the canonical spelling the
+# generator writes.
+_LINE_LOOKUP: Final[dict[tuple[str, str], LineKind]] = {
+    (t.casefold(), d.casefold()): k for (t, d), k in LINE_VOCABULARY.items()
+}
+_AMOUNT_TYPE_LOOKUP: Final[dict[str, LineKind]] = {
+    t.casefold(): k for t, k in AMOUNT_TYPE_VOCABULARY.items()
+}
+_TRANSACTION_LOOKUP: Final[dict[str, TransactionType]] = {
+    s.casefold(): t for s, t in TRANSACTION_VOCABULARY.items()
+}
+
 
 def classify_line(amount_type: str, amount_description: str) -> LineKind:
     """Exact pair first, then amount-type wildcard, else UNCLASSIFIED (D4).
     Unknown codes are never dropped; above the floor they become class 8."""
-    kind = LINE_VOCABULARY.get((amount_type, amount_description))
+    kind = _LINE_LOOKUP.get((amount_type.strip().casefold(), amount_description.strip().casefold()))
     if kind is not None:
         return kind
-    return AMOUNT_TYPE_VOCABULARY.get(amount_type, LineKind.UNCLASSIFIED)
+    return _AMOUNT_TYPE_LOOKUP.get(amount_type.strip().casefold(), LineKind.UNCLASSIFIED)
 
 
 def classify_transaction(transaction_type: str) -> TransactionType:
-    return TRANSACTION_VOCABULARY.get(transaction_type, TransactionType.OTHER)
+    """Open vocabulary: unknown values are OTHER, and the caller keeps the raw
+    string on the line (``types.SettlementLine.transaction_type_raw``)."""
+    return _TRANSACTION_LOOKUP.get(transaction_type.strip().casefold(), TransactionType.OTHER)
+
+
+# --------------------------------------------------------------------------- #
+# Category identifiers (D17 coverage) pinned to one Amazon.in fee-category node
+# --------------------------------------------------------------------------- #
+
+#: The three identifiers the generator tags orders with and the rate card
+#: declares coverage for, each pinned to exactly one Amazon.in fee-category
+#: node (RS3 §1: "home-kitchen" and "apparel" are umbrellas of a dozen nodes
+#: each, so an unpinned identifier would make the coverage declaration false).
+#: Node names only; every rate lives in ratecard/ and generator/ separately.
+CATEGORY_NODES: Final[dict[str, str]] = {
+    "electronics-accessories": "Electronics Accessories",
+    "home-kitchen": "Kitchen - Cookware, Tableware & Dinnerware",
+    "apparel": "Apparel - Shirts",
+}
 
 
 # --------------------------------------------------------------------------- #
