@@ -118,7 +118,102 @@ def test_a_window_step_is_only_used_where_the_mechanism_has_a_window(labels):
             assert mechanism in c.MECHANISMS_WITH_WINDOW, scenario
 
 
-def test_loader_rejects_a_combination_the_ladder_cannot_emit():
+def test_a_windowed_label_may_not_claim_its_source_states_the_window(labels):
+    # Gap 7: the ladder is first-match-wins, so any class-5 label decided at
+    # step 2 or later turns on the SAFE-T window not having expired first, and
+    # no page read states a day count. Such a label may not carry verified.
+    for scenario, label in labels.items():
+        error_class = SCENARIOS[scenario].expected_class
+        if c.PRIMARY_MECHANISM[error_class] not in c.MECHANISMS_WITH_WINDOW:
+            continue
+        if label.expected_precedence_step >= 2:
+            assert label.citation.verified is False, scenario
+
+
+def _write(raw: dict, entries: list[dict], tmp_path) -> object:
+    path = tmp_path / "claimability.json"
+    path.write_text(json.dumps(dict(raw, labels=entries)), encoding="utf-8")
+    return path
+
+
+def _replace(raw: dict, scenario: Scenario, **fields) -> list[dict]:
+    return [
+        dict(entry, **fields) if entry["scenario"] == scenario.value else entry
+        for entry in raw["labels"]
+    ]
+
+
+def test_load_labels_rejects_a_combination_the_ladder_cannot_emit(tmp_path, raw):
+    # Gap 10: the assertion has to run through the loader, because the loader is
+    # what a post-freeze ADR-0003 amendment would be read by.
+    entries = _replace(raw, Scenario.C5_WINDOW_EXPIRED, expected_state="CLAIM-READY")
+    with pytest.raises(LadderError, match="step 2 emits"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_rejects_a_class_7_label_off_step_0b(tmp_path, raw):
+    entries = _replace(
+        raw,
+        Scenario.C7_TCS_MISMATCH,
+        expected_precedence_step="6",
+        expected_state="CLAIM-READY",
+        expected_blocker_kind=None,
+    )
+    with pytest.raises(LabelsError, match="terminates at step 0b"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_rejects_a_class_8_label_off_step_0(tmp_path, raw):
+    entries = _replace(
+        raw,
+        Scenario.C8_CODE_UNSEEN,
+        expected_precedence_step="5",
+        expected_state="BLOCKED",
+        expected_blocker_kind="seller-action",
+    )
+    with pytest.raises(LabelsError, match="terminates at step 0"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_rejects_a_windowed_step_on_a_class_with_no_window(tmp_path, raw):
+    # Class 1 files through a support ticket and has no window (ADR-0006).
+    entries = _replace(
+        raw,
+        Scenario.C1_PLAIN,
+        expected_precedence_step="2",
+        expected_state="NOT-CLAIMABLE",
+        expected_not_claimable_reason="window-expired",
+    )
+    with pytest.raises(LabelsError, match="reads a filing window"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_rejects_step_0_on_a_class_that_files_something(tmp_path, raw):
+    entries = _replace(
+        raw, Scenario.C6_PLAIN, expected_precedence_step="0", expected_state="UNEXPLAINED"
+    )
+    with pytest.raises(LabelsError, match="step 0 belongs to"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_names_the_entry_when_a_field_is_missing(tmp_path, raw):
+    entries = [
+        {k: v for k, v in entry.items() if k != "expected_precedence_step"}
+        if entry["scenario"] == Scenario.C5_PLAIN.value
+        else entry
+        for entry in raw["labels"]
+    ]
+    # Gap 12: the docstring promises LabelsError, not a bare KeyError.
+    with pytest.raises(LabelsError, match=r"C5_PLAIN\]: missing field"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_rejects_a_label_that_is_not_an_object(tmp_path, raw):
+    with pytest.raises(LabelsError, match="must be an object"):
+        load_labels(_write(raw, [*raw["labels"], "C5_PLAIN"], tmp_path))
+
+
+def test_check_combination_rejects_what_the_ladder_cannot_emit():
     with pytest.raises(LadderError):
         check_combination(
             step="2",
