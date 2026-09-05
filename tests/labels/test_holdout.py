@@ -8,12 +8,17 @@ import pytest
 
 from leakproof import contract as c
 from leakproof.labels import load_holdout
+from leakproof.labels.holdout.cases import (
+    ASSUMED_COMMISSION_BP,
+    SETTLEMENT_CYCLE_END,
+    cycle_bounds,
+)
 
 CASES = load_holdout()
 
 
-def test_exactly_twenty_five_cases():
-    assert len(CASES) == 25
+def test_exactly_twenty_six_cases():
+    assert len(CASES) == 26
 
 
 def test_case_ids_are_unique_and_stable():
@@ -45,6 +50,46 @@ def test_lines_belong_to_the_folded_order_and_a_declared_settlement(case):
     for line in case.folded.lines:
         assert line.order_id == case.folded.order_id
         assert line.settlement_id in case.folded.settlement_ids
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
+def test_settlement_ids_are_cycle_ordered_oldest_first(case):
+    # FoldedOrder documents settlement_ids as cycle order, oldest first (D20).
+    ends = [SETTLEMENT_CYCLE_END[sid] for sid in case.folded.settlement_ids]
+    assert ends == sorted(ends)
+    assert len(set(case.folded.settlement_ids)) == len(case.folded.settlement_ids)
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
+def test_every_line_is_posted_inside_the_cycle_it_claims(case):
+    for line in case.folded.lines:
+        start, end = cycle_bounds(line.settlement_id)
+        assert start <= line.posted_date <= end, line.line_id
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
+def test_commission_is_the_assumed_rate_unless_class_1_is_declared(case):
+    # Gap 4: the 13%/19% split is a rate-card assumption expressed in
+    # arithmetic. What the holdout may assert is the relation, and only against
+    # its own single named constant, never against lane C's corpus (D12).
+    order = case.folded.order
+    charged = -sum(
+        ln.amount_paise
+        for ln in case.folded.lines
+        if ln.kind is c.LineKind.COMMISSION
+        and ln.txn_type is c.TransactionType.ORDER
+        and ln.amount_paise < 0
+    )
+    if order is None or charged == 0:
+        return
+    assumed = c.apply_bp(order.principal_paise, ASSUMED_COMMISSION_BP)
+    declares_class_1 = case.expected_class is c.ErrorClass.COMMISSION_OVERCHARGE or (
+        "detector 1" in case.expected_reason.lower()
+    )
+    if declares_class_1:
+        assert charged > assumed, case.case_id
+    else:
+        assert charged == assumed, case.case_id
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
@@ -201,6 +246,38 @@ def test_the_holdout_covers_the_shapes_the_brief_names():
 
     out_of_window = by_id["H22-delivery-outside-the-declared-coverage"]
     assert out_of_window.folded.in_coverage is False
+
+
+REFUND_TXNS = (
+    c.TransactionType.REFUND,
+    c.TransactionType.CHARGEBACK_REFUND,
+    c.TransactionType.ATOZ_REFUND,
+)
+
+
+def _cycles_from_as_of(case) -> set[int]:
+    """Days between each refund-side line and the batch's as_of, in days."""
+    return {
+        (case.folded.as_of - ln.posted_date).days
+        for ln in case.folded.lines
+        if ln.txn_type in REFUND_TXNS
+    }
+
+
+def test_exactly_one_case_sits_on_the_one_cycle_boundary():
+    # Gap 9: H03 and H25 used to sit exactly DEFAULT_CYCLE_DAYS before as_of
+    # while existing to pin the materiality floor and chargeback eligibility,
+    # so an off-by-one in the fold would have surfaced as a broken floor. The
+    # boundary now belongs to one case that says so.
+    on_boundary = [
+        case.case_id for case in CASES if c.DEFAULT_CYCLE_DAYS in _cycles_from_as_of(case)
+    ]
+    assert on_boundary == ["H26-refund-exactly-one-cycle-before-the-batch-max"]
+
+    boundary = next(case for case in CASES if case.case_id.startswith("H26"))
+    assert "boundary" in boundary.description.lower()
+    assert boundary.expected_class is c.ErrorClass.REFUND_NO_FEE_REVERSAL
+    assert boundary.expected_state is c.State.CLAIM_READY
 
 
 def test_co_firing_case_declares_no_single_class():

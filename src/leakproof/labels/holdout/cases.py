@@ -1,4 +1,4 @@
-"""The 25-case adversarial holdout (D12). Lane F, hand-authored, frozen with
+"""The 26-case adversarial holdout (D12). Lane F, hand-authored, frozen with
 the labels.
 
 Cases the generator never produces. Each one is a canonical ``FoldedOrder``
@@ -25,16 +25,19 @@ these cases exist to catch off-by-one deadline arithmetic (D18).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Final
 
 from leakproof.contract import (
+    DEFAULT_CYCLE_DAYS,
+    MATERIALITY_FLOOR_PAISE,
     ErrorClass,
     LineKind,
     Paise,
     RefundInitiator,
     State,
     TransactionType,
+    apply_bp,
     make_line_id,
 )
 from leakproof.types import (
@@ -62,6 +65,57 @@ C3_ID: Final[str] = "IN-SET-C3"
 C1_DATE: Final[date] = date(2026, 7, 7)
 C2_DATE: Final[date] = date(2026, 7, 14)
 C3_DATE: Final[date] = date(2026, 7, 21)
+
+#: A date inside cycle 2 but off its last day. H03 and H25 used to post their
+#: refunds on C2_DATE, exactly ``DEFAULT_CYCLE_DAYS`` before the batch's max
+#: settlement date; that is the D20 one-cycle boundary, which H26 exists to
+#: pin. A case that pins the materiality floor or chargeback eligibility must
+#: not sit on it too, or an off-by-one in the fold reads as a broken floor.
+C2_MID_DATE: Final[date] = date(2026, 7, 10)
+
+#: Last day of each settlement cycle in this module. A cycle is
+#: ``contract.DEFAULT_CYCLE_DAYS`` long and ends on the settlement's own date,
+#: so a line's posted date has to fall inside the cycle whose id it carries.
+SETTLEMENT_CYCLE_END: Final[dict[str, date]] = {
+    C1_ID: C1_DATE,
+    C2_ID: C2_DATE,
+    C3_ID: C3_DATE,
+    "IN-SET-2028-02-16": date(2028, 2, 16),
+    "IN-SET-2026-02-03": date(2026, 2, 3),
+}
+
+#: The commission rate every fee line in this module is computed from.
+#:
+#: It is an **assumption about lane C's corpus, not a figure read from it**:
+#: this package must never encode a rate card (D12), and it never opens
+#: ``ratecard/`` or ``generator/``. What the holdout actually asserts is a
+#: relation — a case that declares no class-1 finding is charged exactly this
+#: rate, and a case that declares one is charged strictly above it. Naming the
+#: assumption once means the whole module moves together if lane C's audited
+#: rate for the pinned category turns out to differ, instead of nine cases
+#: silently disagreeing with each other. It is applied regardless of the
+#: order's category on purpose, so that no category-level rate structure is
+#: encoded here either.
+ASSUMED_COMMISSION_BP: Final[int] = 1_300
+
+#: How far above the assumed rate an over-charged case is charged. Only the
+#: sign is load-bearing: these cases exist to test that "above" is noticed, not
+#: that any particular wrong rate is.
+OVERCHARGE_MARGIN_BP: Final[int] = 600
+
+OVERCHARGED_COMMISSION_BP: Final[int] = ASSUMED_COMMISSION_BP + OVERCHARGE_MARGIN_BP
+
+
+def cycle_bounds(settlement_id: str) -> tuple[date, date]:
+    """First and last day, both inclusive, of the cycle ``settlement_id`` covers."""
+    end = SETTLEMENT_CYCLE_END[settlement_id]
+    return end - timedelta(days=DEFAULT_CYCLE_DAYS - 1), end
+
+
+def _commission(principal_paise: Paise, *, bp: int = ASSUMED_COMMISSION_BP) -> Paise:
+    """The signed amount of a commission line: negative, because it is a fee."""
+    return -apply_bp(principal_paise, bp)
+
 
 #: The seller in force for most cases: GST-registered without end date.
 REGISTERED: Final[SellerProfile] = SellerProfile(
@@ -204,7 +258,7 @@ H01 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -30_000,
+                _commission(250_000),
                 C1_DATE,
                 "403-1000001-0000001",
             ),
@@ -217,7 +271,7 @@ H01 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -250_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000001-0000001",
             ),
             _line(
@@ -228,8 +282,8 @@ H01 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                29_900,
-                C2_DATE,
+                -_commission(250_000) - 100,
+                C2_MID_DATE,
                 "403-1000001-0000001",
             ),
         ),
@@ -277,7 +331,7 @@ H02 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -30_000,
+                _commission(250_000),
                 C1_DATE,
                 "403-1000002-0000002",
             ),
@@ -290,7 +344,7 @@ H02 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -250_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000002-0000002",
             ),
             _line(
@@ -301,8 +355,8 @@ H02 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                30_100,
-                C2_DATE,
+                -_commission(250_000) + 100,
+                C2_MID_DATE,
                 "403-1000002-0000002",
             ),
         ),
@@ -330,7 +384,7 @@ H03 = HoldoutCase(
     ),
     folded=_fold(
         "403-1000003-0000003",
-        _order("403-1000003-0000003", 4, principal_paise=180_000, tax_paise=32_400),
+        _order("403-1000003-0000003", 4, principal_paise=200_000, tax_paise=36_000),
         (
             _line(
                 C1_FILE,
@@ -340,7 +394,7 @@ H03 = HoldoutCase(
                 LineKind.PRINCIPAL,
                 "ItemPrice",
                 "Principal",
-                180_000,
+                200_000,
                 C1_DATE,
                 "403-1000003-0000003",
             ),
@@ -352,7 +406,7 @@ H03 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -12_000,
+                _commission(200_000),
                 C1_DATE,
                 "403-1000003-0000003",
             ),
@@ -364,8 +418,8 @@ H03 = HoldoutCase(
                 LineKind.PRINCIPAL,
                 "ItemPrice",
                 "Principal",
-                -180_000,
-                C2_DATE,
+                -200_000,
+                C2_MID_DATE,
                 "403-1000003-0000003",
             ),
             _line(
@@ -376,8 +430,8 @@ H03 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                11_000,
-                C2_DATE,
+                -_commission(200_000) - MATERIALITY_FLOOR_PAISE,
+                C2_MID_DATE,
                 "403-1000003-0000003",
             ),
         ),
@@ -390,9 +444,12 @@ H03 = HoldoutCase(
     expected_reason=(
         "is_material is at-or-above the floor, so ₹10 exactly is queued and lands in "
         "₹ identified. An implementation using a strict greater-than pushes it into "
-        "below-materiality and quietly shrinks the headline number."
+        "below-materiality and quietly shrinks the headline number. The refund is posted "
+        "on 2026-07-10, eleven days before the batch's max settlement date, so this case "
+        "sits well clear of the D20 one-cycle boundary that H26 owns: an off-by-one in "
+        "the fold must not be able to surface here as a broken materiality floor."
     ),
-    expected_amount_paise=1_000,
+    expected_amount_paise=MATERIALITY_FLOOR_PAISE,
 )
 
 # --------------------------------------------------------------------------- #
@@ -429,7 +486,7 @@ H04 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -50_000,
+                _commission(400_000),
                 C1_DATE,
                 "403-1000004-0000004",
             ),
@@ -442,7 +499,7 @@ H04 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -400_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000004-0000004",
             ),
             _line(
@@ -454,7 +511,7 @@ H04 = HoldoutCase(
                 "ItemFees",
                 "Commission",
                 30_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000004-0000004",
             ),
             _line(
@@ -465,8 +522,8 @@ H04 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                20_000,
-                C2_DATE,
+                -_commission(400_000) - 30_000,
+                C2_MID_DATE,
                 "403-1000004-0000004",
             ),
         ),
@@ -516,7 +573,7 @@ H05 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -41_600,
+                _commission(320_000),
                 C1_DATE,
                 "403-1000005-0000005",
             ),
@@ -540,7 +597,7 @@ H05 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                41_600,
+                -_commission(320_000),
                 C3_DATE,
                 "403-1000005-0000005",
             ),
@@ -593,7 +650,7 @@ H06 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -95_000,
+                _commission(500_000, bp=OVERCHARGED_COMMISSION_BP),
                 C1_DATE,
                 "403-1000006-0000006",
             ),
@@ -606,7 +663,7 @@ H06 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -500_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000006-0000006",
             ),
         ),
@@ -657,7 +714,7 @@ H07 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -27_300,
+                _commission(210_000),
                 C1_DATE,
                 "403-1000007-0000007",
             ),
@@ -672,7 +729,10 @@ H07 = HoldoutCase(
         "An orphan is the mirror of class 6, not an instance of it: class 6 is an order in "
         "the export that no settlement pays, and this is a settlement with no export row. "
         "It is counted in orphan_order_ids and produces no finding. Without the order the "
-        "category is unknown, so no rate-card recomputation may be attempted on it either."
+        "category is unknown, so no rate-card recomputation may be attempted on it either. "
+        "in_coverage is True and carries no meaning for this case: coverage is decided "
+        "from the order's delivery date, and there is no order row to read one from, so "
+        "the disposition that applies to this fold is orphan, never out-of-window."
     ),
     expected_amount_paise=None,
 )
@@ -685,7 +745,8 @@ H08 = HoldoutCase(
     case_id="H08-capability-lapsed-before-the-event",
     description=(
         "GST registration held until 2026-06-30 and declared absent from 2026-07-01; the "
-        "fee event is 2026-07-07. The Amazon-native form of the SPF/VMS case in premise P2."
+        "fee event is 2026-07-07. The Amazon-native form of the SPF/VMS case in premise P2. "
+        "A plain over-charged sale with no refund, so only class 1 can fire."
     ),
     folded=_fold(
         "403-1000008-0000008",
@@ -711,19 +772,7 @@ H08 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -49_400,
-                C1_DATE,
-                "403-1000008-0000008",
-            ),
-            _line(
-                C1_FILE,
-                143,
-                C1_ID,
-                TransactionType.REFUND,
-                LineKind.PRINCIPAL,
-                "ItemPrice",
-                "Principal",
-                -260_000,
+                _commission(260_000, bp=OVERCHARGED_COMMISSION_BP),
                 C1_DATE,
                 "403-1000008-0000008",
             ),
@@ -737,8 +786,10 @@ H08 = HoldoutCase(
     expected_reason=(
         "evidence-unobtainable at step 4. The capability must be read at the event date, "
         "not at whichever fact appears first: reading the lapsed fact's holds=True passes "
-        "a seller who can no longer issue a GST tax invoice. The window is computable and "
-        "open here, so step 3 does not pre-empt step 4."
+        "a seller who can no longer issue a GST tax invoice. Class 1 files through a "
+        "support ticket and has no filing window (ADR-0006), so steps 2 and 3 cannot "
+        "pre-empt step 4 at all. The order carries no refund line, so detector 5 has "
+        "nothing to fire on and the case isolates the capability question."
     ),
     expected_amount_paise=None,
 )
@@ -747,7 +798,7 @@ H09 = HoldoutCase(
     case_id="H09-registered-but-invoice-not-yet-supplied",
     description=(
         "Same fee shape as H08 on a seller whose registration covers the event date, with "
-        "the tax invoice not yet attached."
+        "the tax invoice not yet attached. No refund, so class 5 cannot co-fire."
     ),
     folded=_fold(
         "403-1000009-0000009",
@@ -773,19 +824,7 @@ H09 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -49_400,
-                C2_DATE,
-                "403-1000009-0000009",
-            ),
-            _line(
-                C2_FILE,
-                153,
-                C2_ID,
-                TransactionType.REFUND,
-                LineKind.PRINCIPAL,
-                "ItemPrice",
-                "Principal",
-                -260_000,
+                _commission(260_000, bp=OVERCHARGED_COMMISSION_BP),
                 C2_DATE,
                 "403-1000009-0000009",
             ),
@@ -799,7 +838,9 @@ H09 = HoldoutCase(
     expected_reason=(
         "seller-action at step 5, naming the tax invoice. The document exists and can be "
         "produced, so it is missing rather than unobtainable; collapsing steps 4 and 5 "
-        "turns a to-do into a verdict."
+        "turns a to-do into a verdict. Class 1 has no filing window, so nothing above "
+        "step 4 can decide this, and with no refund line only detector 1 fires: the case "
+        "isolates the invoice question and scores exactly one class."
     ),
     expected_amount_paise=None,
 )
@@ -838,7 +879,7 @@ H10 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -19_500,
+                _commission(150_000),
                 C1_DATE,
                 "403-1000010-0000010",
             ),
@@ -867,7 +908,7 @@ H10 = HoldoutCase(
         "sorts to the top of the queue. Treating expiry day as expired loses the claim on "
         "the one day it matters most."
     ),
-    expected_amount_paise=19_500,
+    expected_amount_paise=-_commission(150_000),
 )
 
 H11 = HoldoutCase(
@@ -904,7 +945,7 @@ H11 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -28_600,
+                _commission(220_000),
                 date(2028, 2, 16),
                 "403-1000011-0000011",
             ),
@@ -932,7 +973,7 @@ H11 = HoldoutCase(
         "window is open on as_of with days_left 0. Arithmetic that skips 29 February "
         "expires this claim a day early."
     ),
-    expected_amount_paise=28_600,
+    expected_amount_paise=-_commission(220_000),
 )
 
 H12 = HoldoutCase(
@@ -971,7 +1012,7 @@ H12 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -12_350,
+                _commission(95_000),
                 date(2026, 2, 3),
                 "403-1000012-0000012",
             ),
@@ -999,7 +1040,7 @@ H12 = HoldoutCase(
         "month-based arithmetic from a 31st gives 2026-02-28 and keeps a dead claim in "
         "₹ claim-ready, which is the worst direction for this error to run."
     ),
-    expected_amount_paise=12_350,
+    expected_amount_paise=-_commission(95_000),
 )
 
 # --------------------------------------------------------------------------- #
@@ -1061,7 +1102,7 @@ H13 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -300_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000013-0000013",
             ),
             _line(
@@ -1073,7 +1114,7 @@ H13 = HoldoutCase(
                 "ItemWithheldTax",
                 "TCS-CGST",
                 1_500,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000013-0000013",
             ),
             _line(
@@ -1085,7 +1126,7 @@ H13 = HoldoutCase(
                 "ItemWithheldTax",
                 "TCS-SGST",
                 1_500,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000013-0000013",
             ),
         ),
@@ -1135,7 +1176,7 @@ H14 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -36_400,
+                _commission(280_000),
                 C1_DATE,
                 "403-1000014-0000014",
             ),
@@ -1159,7 +1200,7 @@ H14 = HoldoutCase(
                 LineKind.SAFET_REIMBURSEMENT,
                 "other-transaction",
                 "SAFE-T Reimbursement",
-                36_400,
+                -_commission(280_000),
                 C3_DATE,
                 "403-1000014-0000014",
                 sku=None,
@@ -1216,7 +1257,7 @@ H15 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -20_800,
+                _commission(160_000),
                 C1_DATE,
                 "403-1000015-0000015",
             ),
@@ -1228,7 +1269,7 @@ H15 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -20_800,
+                _commission(160_000),
                 C1_DATE,
                 "403-1000015-0000015",
             ),
@@ -1238,16 +1279,19 @@ H15 = HoldoutCase(
     ),
     profile=REGISTERED,
     expected_class=ErrorClass.COMMISSION_OVERCHARGE,
-    expected_state=State.BLOCKED,
+    expected_state=State.CLAIM_READY,
     expected_reason=(
         "Exactly one finding, for the duplicate charge, claimed on the second line's own "
         "line_id: the rows are distinct deductions and de-duplicating them at parse time "
-        "would erase a real ₹208 loss. State is BLOCKED(timing) at step 3, because this "
-        "order carries no refund or return-scan date and the mechanism the contract "
-        "assigns class 1 has a window that therefore cannot be computed. That outcome is "
-        "the sharpest evidence for the class-1 mechanism question in lane F's report."
+        "would erase a real ₹208 loss. CLAIM-READY at step 6, and this case is why "
+        "ADR-0006 was taken: while class 1 filed through SAFE-T it expected "
+        "BLOCKED(timing) at step 3 forever, because a plain un-refunded sale has no "
+        "refund or return-scan date to start a window from. Class 1 now files through a "
+        "support ticket with no window, so steps 2 and 3 cannot fire, both commission "
+        "lines and the principal row are report-derivable, this seller holds the GST "
+        "registration the tax invoice needs, and the ladder falls through."
     ),
-    expected_amount_paise=20_800,
+    expected_amount_paise=-_commission(160_000),
 )
 
 H16 = HoldoutCase(
@@ -1289,7 +1333,7 @@ H16 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -18_200,
+                _commission(140_000),
                 C1_DATE,
                 "403-1000016-0000016",
             ),
@@ -1317,7 +1361,10 @@ H17 = HoldoutCase(
     case_id="H17-known-code-with-no-rule",
     description=(
         "A deduction under a vocabulary pair the parser recognises, for a kind the rate "
-        "card neither audits nor acknowledges."
+        "card neither audits nor acknowledges. The case assumes lane C's corpus declares "
+        "neither a rule nor an acknowledgement for LineKind.TECHNOLOGY_FEE; this package "
+        "never reads that corpus (D12), so the assumption is stated rather than checked, "
+        "and if lane C acknowledges the kind this case has to move to another one."
     ),
     folded=_fold(
         "403-1000017-0000017",
@@ -1447,7 +1494,7 @@ H19 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -44_200,
+                _commission(340_000),
                 C1_DATE,
                 "403-1000019-0000019",
             ),
@@ -1460,7 +1507,7 @@ H19 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -340_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000019-0000019",
             ),
         ),
@@ -1476,7 +1523,7 @@ H19 = HoldoutCase(
         "The window is still open, which is the trap: a ladder that checks the window "
         "before the rules reports this as claim-ready."
     ),
-    expected_amount_paise=44_200,
+    expected_amount_paise=-_commission(340_000),
 )
 
 H20 = HoldoutCase(
@@ -1512,7 +1559,7 @@ H20 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -44_200,
+                _commission(340_000),
                 C1_DATE,
                 "403-1000020-0000020",
             ),
@@ -1525,7 +1572,7 @@ H20 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -340_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000020-0000020",
             ),
         ),
@@ -1541,7 +1588,7 @@ H20 = HoldoutCase(
         "read from the order export; a detector that works from settlement rows alone "
         "cannot tell H20 from a genuine claim."
     ),
-    expected_amount_paise=44_200,
+    expected_amount_paise=-_commission(340_000),
 )
 
 # --------------------------------------------------------------------------- #
@@ -1553,7 +1600,7 @@ H21 = HoldoutCase(
     description="Unreversed commission of ₹9.99, a single paisa under the materiality floor.",
     folded=_fold(
         "403-1000021-0000021",
-        _order("403-1000021-0000021", 21, principal_paise=7_700, tax_paise=1_386),
+        _order("403-1000021-0000021", 21, principal_paise=7_685, tax_paise=1_383),
         (
             _line(
                 C1_FILE,
@@ -1563,7 +1610,7 @@ H21 = HoldoutCase(
                 LineKind.PRINCIPAL,
                 "ItemPrice",
                 "Principal",
-                7_700,
+                7_685,
                 C1_DATE,
                 "403-1000021-0000021",
             ),
@@ -1575,7 +1622,7 @@ H21 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -999,
+                _commission(7_685),
                 C1_DATE,
                 "403-1000021-0000021",
             ),
@@ -1587,8 +1634,8 @@ H21 = HoldoutCase(
                 LineKind.PRINCIPAL,
                 "ItemPrice",
                 "Principal",
-                -7_700,
-                C2_DATE,
+                -7_685,
+                C2_MID_DATE,
                 "403-1000021-0000021",
             ),
         ),
@@ -1603,7 +1650,7 @@ H21 = HoldoutCase(
         "queued and never inside ₹ identified. Paired with H03 it pins both sides of the "
         "floor to the paisa."
     ),
-    expected_amount_paise=999,
+    expected_amount_paise=MATERIALITY_FLOOR_PAISE - 1,
 )
 
 H22 = HoldoutCase(
@@ -1642,8 +1689,8 @@ H22 = HoldoutCase(
 H23 = HoldoutCase(
     case_id="H23-capability-never-declared",
     description=(
-        "The same fee shape as H08 and H09 on a seller profile that declares no "
-        "capability facts at all."
+        "The same fee shape as H08 and H09, charged at the same rate above the assumed "
+        "one, on a seller profile that declares no capability facts at all."
     ),
     folded=_fold(
         "403-1000023-0000023",
@@ -1669,19 +1716,7 @@ H23 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -33_800,
-                C2_DATE,
-                "403-1000023-0000023",
-            ),
-            _line(
-                C2_FILE,
-                313,
-                C2_ID,
-                TransactionType.REFUND,
-                LineKind.PRINCIPAL,
-                "ItemPrice",
-                "Principal",
-                -260_000,
+                _commission(260_000, bp=OVERCHARGED_COMMISSION_BP),
                 C2_DATE,
                 "403-1000023-0000023",
             ),
@@ -1697,7 +1732,10 @@ H23 = HoldoutCase(
         "capability() returns None here, and None is not False: without the profile "
         "config step 4 is unreachable and the case must degrade to step 5 honestly rather "
         "than be declared unobtainable. Reading None as False sends H23 to the same "
-        "not-claimable line as H08 on no evidence at all."
+        "not-claimable line as H08 on no evidence at all. The commission here is charged "
+        "above the assumed rate, exactly as in H08 and H09; at the assumed rate no class-1 "
+        "finding could exist and the case would be unsatisfiable. There is no refund line, "
+        "so class 5 cannot co-fire and the permanence question is the only one being asked."
     ),
     expected_amount_paise=None,
 )
@@ -1732,7 +1770,7 @@ H24 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -29_900,
+                _commission(230_000),
                 C3_DATE,
                 "403-1000024-0000024",
             ),
@@ -1789,7 +1827,7 @@ H25 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -20_500,
+                _commission(410_000),
                 C1_DATE,
                 "403-1000025-0000025",
             ),
@@ -1802,7 +1840,7 @@ H25 = HoldoutCase(
                 "ItemPrice",
                 "Principal",
                 -410_000,
-                C2_DATE,
+                C2_MID_DATE,
                 "403-1000025-0000025",
             ),
         ),
@@ -1818,9 +1856,85 @@ H25 = HoldoutCase(
         "page lists bank-initiated chargebacks as outside that guarantee, and the SAFE-T "
         "terms that would say whether a chargeback refund is claimable are behind the "
         "Seller Central sign-in. Recorded deliberately so that reaching the primary page "
-        "later changes a published holdout line rather than a silent assumption."
+        "later changes a published holdout line rather than a silent assumption. The "
+        "refund is posted on 2026-07-10 rather than on the cycle-2 boundary, so an "
+        "off-by-one in the D20 fold cannot surface here as a chargeback-eligibility "
+        "answer; H26 owns that boundary."
     ),
-    expected_amount_paise=20_500,
+    expected_amount_paise=-_commission(410_000),
+)
+
+
+# --------------------------------------------------------------------------- #
+# 26 — the D20 one-cycle boundary, on it deliberately
+# --------------------------------------------------------------------------- #
+
+H26 = HoldoutCase(
+    case_id="H26-refund-exactly-one-cycle-before-the-batch-max",
+    description=(
+        "Unreversed commission on a refund posted exactly DEFAULT_CYCLE_DAYS before the "
+        "batch's max settlement date: the boundary between C5_PLAIN and C5_AWAITING_CYCLE."
+    ),
+    folded=_fold(
+        "403-1000026-0000026",
+        _order("403-1000026-0000026", 26, principal_paise=300_000, tax_paise=54_000),
+        (
+            _line(
+                C1_FILE,
+                351,
+                C1_ID,
+                TransactionType.ORDER,
+                LineKind.PRINCIPAL,
+                "ItemPrice",
+                "Principal",
+                300_000,
+                C1_DATE,
+                "403-1000026-0000026",
+            ),
+            _line(
+                C1_FILE,
+                352,
+                C1_ID,
+                TransactionType.ORDER,
+                LineKind.COMMISSION,
+                "ItemFees",
+                "Commission",
+                _commission(300_000),
+                C1_DATE,
+                "403-1000026-0000026",
+            ),
+            _line(
+                C2_FILE,
+                361,
+                C2_ID,
+                TransactionType.REFUND,
+                LineKind.PRINCIPAL,
+                "ItemPrice",
+                "Principal",
+                -300_000,
+                C2_DATE,
+                "403-1000026-0000026",
+            ),
+        ),
+        (C1_ID, C2_ID),
+        C3_DATE,
+    ),
+    profile=REGISTERED,
+    expected_class=ErrorClass.REFUND_NO_FEE_REVERSAL,
+    expected_state=State.CLAIM_READY,
+    expected_reason=(
+        "The refund is posted on 2026-07-14 and the batch's max settlement date is "
+        "2026-07-21, exactly DEFAULT_CYCLE_DAYS apart. C5_PLAIN is a refund settled at "
+        "least one full cycle ago and C5_AWAITING_CYCLE is one settled less than a full "
+        "cycle ago, so at-or-above is the rule and this case is C5_PLAIN, not "
+        "C5_AWAITING_CYCLE: strict greater-than parks a real claim in BLOCKED(timing) "
+        "for a week. It exists so that an off-by-one in the fold shows up here, on the "
+        "boundary it names, rather than in H03 or H25, which pin the materiality floor "
+        "and chargeback eligibility and used to sit on this boundary by accident. The "
+        "refund date is on the line and 2026-07-14 plus the encoded 15-day filing window "
+        "is 2026-07-29, so the window is open and the ladder falls through to step 6."
+    ),
+    expected_amount_paise=-_commission(300_000),
 )
 
 
@@ -1850,9 +1964,10 @@ HOLDOUT_CASES: Final[tuple[HoldoutCase, ...]] = (
     H23,
     H24,
     H25,
+    H26,
 )
 
 
 def load_holdout() -> tuple[HoldoutCase, ...]:
-    """The 25 hand-authored adversarial cases, in stable order (D12)."""
+    """The hand-authored adversarial cases, in stable order (D12)."""
     return HOLDOUT_CASES
