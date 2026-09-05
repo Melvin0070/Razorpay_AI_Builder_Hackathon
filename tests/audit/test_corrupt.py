@@ -94,3 +94,67 @@ def test_wrong_enum_value_fails_gate_and_append(tmp_path):
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     _assert_fails_gate_and_append_at_line_3(path, tmp_path, reason_substring="not_a_real_action")
+
+
+def test_truncated_mid_multibyte_char_fails_gate_and_append_without_raising(tmp_path):
+    """C1: entries() used to open with encoding="utf-8" and decode inside
+    the `for line in fh` iteration itself -- OUTSIDE the try/except that
+    catches every other parse failure -- and _read_tail_line_fast's
+    .decode("utf-8") was similarly unguarded. A write cut off mid-UTF-8
+    character (the canonical shape of an interrupted write on a non-ASCII
+    field, e.g. an actor name) used to raise a bare UnicodeDecodeError past
+    verify_chain/audit_chain_gate/append instead of being reported as
+    ordinary corruption -- exactly the failure mode F1 existed to remove.
+    Uses a non-ASCII actor (conftest's default actor is pure ASCII, which is
+    why the original F1 corruption tests never exercised this path)."""
+    path = tmp_path / "audit.jsonl"
+    log = AuditLog(path)
+    append_sample(log, "2026-08-21T10:00:00Z")
+    append_sample(log, "2026-08-21T10:00:01Z")
+    append_sample(log, "2026-08-21T10:00:02Z", actor="détectrice")
+
+    raw = path.read_bytes()
+    body, trailing_newline, after = raw.rpartition(b"\n")
+    assert trailing_newline == b"\n" and after == b"", "fixture assumption: file ends in \\n"
+    lines = body.split(b"\n")
+    last_line = lines[-1]
+    # "é" is a 2-byte UTF-8 sequence (0xc3 0xa9); cut right after the first
+    # byte so the line ends mid-character, with no trailing newline either
+    # -- a truncated write is exactly what leaves the file in this state.
+    cut_at = last_line.index("é".encode()) + 1
+    lines[-1] = last_line[:cut_at]
+    path.write_bytes(b"\n".join(lines))
+
+    result = verify_chain(path)
+    assert not result.ok
+    assert result.first_bad_seq == 3
+    assert result.entries == 2
+    assert result.detail.startswith("line 3 unparseable:")
+    assert "codec can't decode" in result.detail
+
+    gate_result = audit_chain_gate(path, tmp_path / "artifacts")
+    assert not gate_result.ok
+    assert gate_result.detail == result.detail
+
+    with pytest.raises(AuditLogCorruptError) as excinfo:
+        AuditLog(path).append(**_APPEND_KWARGS)
+    assert excinfo.value.line_no == 3
+
+
+def test_log_path_is_a_directory_fails_gate_without_raising(tmp_path):
+    """C1: the log path itself being a directory used to raise a bare
+    IsADirectoryError out of _read_tail_line_fast (opening it "rb") and out
+    of entries() (opening it "r"), past every guard."""
+    path = tmp_path / "audit.jsonl"
+    path.mkdir()
+
+    result = verify_chain(path)
+    assert not result.ok
+    assert "directory" in result.detail
+
+    gate_result = audit_chain_gate(path, tmp_path / "artifacts")
+    assert not gate_result.ok
+    assert gate_result.detail == result.detail
+
+    with pytest.raises(AuditLogCorruptError):
+        AuditLog(path).append(**_APPEND_KWARGS)

@@ -51,11 +51,14 @@ tamper-*proof*: anyone with write access to the file can rewrite an entry and
 re-chain everything after it by hand. Verification catches an edit that was
 NOT re-chained — the common case, and the one a hard gate can act on.
 
-Malformed content (a truncated last line from an interrupted write, a garbage
-line, a line missing a required key, a bad enum value) is a fact about the
-file, not a bug in the caller: ``entries()``, ``head()`` and ``append()``
-never let ``json.JSONDecodeError``/``KeyError``/``ValueError``/``TypeError``
-escape from a bad line. They raise the single typed
+Malformed content (a truncated last line from an interrupted write — including
+one cut off mid multi-byte UTF-8 character, the canonical shape of an
+interrupted write on a non-ASCII field — a garbage line, a line missing a
+required key, a bad enum value, or the log path itself being a directory) is
+a fact about the file, not a bug in the caller: ``entries()``, ``head()`` and
+``append()`` never let ``json.JSONDecodeError``/``UnicodeDecodeError``/
+``KeyError``/``ValueError``/``TypeError``/``IsADirectoryError`` escape from a
+bad line or bad path. They raise the single typed
 :class:`AuditLogCorruptError` instead. ``verify_chain`` and
 ``audit_chain_gate`` in turn never raise on file content at all — a bad line
 is reported as a normal, non-ok :class:`ChainVerification`/``GateResult``
@@ -95,8 +98,9 @@ _PARSE_ERRORS: Final[tuple[type[Exception], ...]] = (
 class AuditLogCorruptError(ValueError):
     """Raised by :meth:`AuditLog.entries`, :meth:`AuditLog.head` and
     :meth:`AuditLog.append` when a physical line in the on-disk log cannot be
-    parsed back into an ``AuditEntry`` — bad JSON, a missing key, a value the
-    wrong shape, or an enum string that names no member.
+    parsed back into an ``AuditEntry`` — bad JSON, undecodable bytes, a
+    missing key, a value the wrong shape, or an enum string that names no
+    member — or when the log path itself is a directory.
 
     The log is append-only and cannot be repaired in place: there is no
     "rewrite just this line" operation, because doing so without also
@@ -131,15 +135,21 @@ def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SI
     O(n^2) (each of n appends re-parsed all entries so far to find the tail).
 
     Returns ``None`` when it cannot confidently identify a complete last
-    line: an empty file, or a file whose last byte is not a newline (a write
+    line: an empty file, a file whose last byte is not a newline (a write
     interrupted mid-line, or simply a file this function should not guess
-    about). The caller falls back to the accurate, fully-parsed path in that
-    case rather than trusting a partial read.
+    about), a path that is a directory, or a last line whose bytes are not
+    valid UTF-8 (a write interrupted mid-multibyte-character). The caller
+    falls back to the accurate, fully-parsed path in every such case rather
+    than trusting a partial or undecodable read.
     """
     size = path.stat().st_size
     if size == 0:
         return None
-    with path.open("rb") as fh:
+    try:
+        raw_fh = path.open("rb")
+    except IsADirectoryError:
+        return None
+    with raw_fh as fh:
         fh.seek(-1, os.SEEK_END)
         if fh.read(1) != b"\n":
             return None
@@ -153,7 +163,10 @@ def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SI
             body = chunk[:-1]  # drop the one trailing newline confirmed above
             idx = body.rfind(b"\n")
             if idx != -1 or pos == 0:
-                return body[idx + 1 :].decode("utf-8")
+                try:
+                    return body[idx + 1 :].decode("utf-8")
+                except UnicodeDecodeError:
+                    return None
     return None  # unreachable: the loop above always returns once pos == 0
 
 
@@ -345,17 +358,29 @@ class AuditLog:
         naming the exact physical line the moment a line fails to parse,
         rather than returning a partial result — a caller that wants the
         good entries before the break point should catch the error and read
-        ``exc.line_no`` (``verify_chain`` does exactly this)."""
+        ``exc.line_no`` (``verify_chain`` does exactly this).
+
+        Opens and decodes in binary (``"rb"``, decoding each line explicitly)
+        rather than opening with ``encoding="utf-8"`` and iterating text
+        lines: the latter raises ``UnicodeDecodeError`` from inside the
+        ``for`` loop itself, outside any guard, so an interrupted write that
+        cuts a line off mid-multibyte-character (the canonical partial
+        write) used to crash past this method instead of being reported as
+        ordinary corruption (C1)."""
         if not self.path.exists():
             return ()
         out: list[AuditEntry] = []
-        with self.path.open("r", encoding="utf-8") as fh:
-            for line_no, raw_line in enumerate(fh, start=1):
-                line = raw_line.strip()
+        try:
+            raw_fh = self.path.open("rb")
+        except IsADirectoryError as exc:
+            raise AuditLogCorruptError(1, f"{self.path} is a directory, not a file") from exc
+        with raw_fh as fh:
+            for line_no, raw_bytes in enumerate(fh, start=1):
+                line = raw_bytes.strip()
                 if not line:
                     continue
                 try:
-                    out.append(_entry_from_dict(json.loads(line)))
+                    out.append(_entry_from_dict(json.loads(line.decode("utf-8"))))
                 except _PARSE_ERRORS as exc:
                     raise AuditLogCorruptError(line_no, _describe_parse_error(exc)) from exc
         return tuple(out)
