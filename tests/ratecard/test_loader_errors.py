@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from leakproof.ratecard import CorpusError, load_rate_card
+from leakproof.ratecard import CorpusError, load_corpus, load_rate_card
 
 COVERAGE = {
     "categories": ["apparel"],
@@ -95,7 +95,7 @@ def test_the_ends_of_the_basis_point_range_are_accepted(tmp_path, percent_bp):
     """Apparel really does price a 0% band, so the bound is inclusive."""
     rule = {**RULE, "percent_bp": percent_bp}
     root = _write(tmp_path / "c", docs={"rules.json": {"source": SOURCE, "rules": [rule]}})
-    assert load_rate_card(root).rules[0].percent_bp == percent_bp
+    assert load_corpus(root).rules[0].percent_bp == percent_bp
 
 
 def test_a_negative_fixed_amount_is_rejected(tmp_path):

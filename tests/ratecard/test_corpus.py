@@ -4,7 +4,7 @@ import json
 from datetime import date
 
 from leakproof.contract import CATEGORY_NODES, LineKind
-from leakproof.ratecard import load_rate_card
+from leakproof.ratecard import load_corpus, load_rate_card
 from tests.ratecard.conftest import CORPUS
 
 
@@ -141,4 +141,5 @@ def test_unclassified_is_never_declared(card):
 
 
 def test_load_rate_card_defaults_to_the_packaged_corpus(card):
-    assert load_rate_card(CORPUS).rules == card.rules
+    assert load_corpus(CORPUS).rules == card.rules
+    assert load_rate_card().coverage() == card.coverage()

@@ -31,7 +31,14 @@ from pathlib import Path
 from typing import Any
 
 from leakproof.contract import Disposition, LineKind, Paise
-from leakproof.types import Citation, CoverageDeclaration, LookupMiss, RateLookup, RateRule
+from leakproof.types import (
+    Citation,
+    CoverageDeclaration,
+    LookupMiss,
+    RateCard,
+    RateLookup,
+    RateRule,
+)
 
 #: Files under ``corpus/`` are rule documents, except this one.
 COVERAGE_FILE = "coverage.json"
@@ -475,14 +482,26 @@ def _default_corpus_path() -> Path:
     return Path(__file__).resolve().parent / "corpus"
 
 
-def load_rate_card(path: Path | None = None) -> RateCardCorpus:
+def load_rate_card(path: Path | None = None) -> RateCard:
     """Read the corpus at ``path`` (default: the packaged one) into a RateCard.
+
+    Annotated with the seam type, not the concrete class: this is what lanes J
+    and L call, and what they may lean on is ``types.RateCard`` -- ``lookup``
+    and ``coverage``, plus the optional band key ``RateCardCorpus.lookup``
+    documents. A detector that reached for ``.rules`` would be reading the
+    corpus rather than the seam, which is the coupling D12 walls off. Lane C's
+    own gate and tests take ``load_corpus`` instead, which keeps the class.
 
     Every rule file is ``{source: <citation>, rules: [...]}``; a rule may carry
     its own ``citation`` when its provenance differs from the file's, which is
     how a rate read off a primary page keeps a ``verified: false`` flag when
     only its validity window came from a secondary one (D14).
     """
+    return load_corpus(path)
+
+
+def load_corpus(path: Path | None = None) -> RateCardCorpus:
+    """``load_rate_card`` with the concrete type. Lane C internal."""
     root = Path(path) if path is not None else _default_corpus_path()
     if not root.is_dir():
         raise CorpusError(f"corpus directory not found: {root}")

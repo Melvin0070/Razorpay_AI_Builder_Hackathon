@@ -21,7 +21,7 @@ from pathlib import Path
 
 from leakproof.contract import Disposition, LineKind, Paise
 from leakproof.gates import GateResult
-from leakproof.ratecard.loader import CorpusError, RateCardCorpus, load_rate_card
+from leakproof.ratecard.loader import CorpusError, RateCardCorpus, load_corpus
 from leakproof.types import LookupMiss
 
 GATE_NAME = "ratecard-config-error"
@@ -42,7 +42,7 @@ _DAY = timedelta(days=1)
 def config_error_gate(path: Path | None = None) -> GateResult:
     """Sweep the corpus and fail on any CONFIG_ERROR inside declared coverage."""
     try:
-        card = load_rate_card(path)
+        card = load_corpus(path)
     except CorpusError as exc:
         # A corpus that will not load is the same build failure as a corpus
         # that sweeps dirty, and it reaches the operator the same way: one

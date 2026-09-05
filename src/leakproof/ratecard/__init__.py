@@ -13,6 +13,7 @@ from leakproof.ratecard.loader import (
     RateCardCorpus,
     SlabBandRequiredError,
     SlabBasis,
+    load_corpus,
     load_rate_card,
 )
 
@@ -23,6 +24,7 @@ __all__ = [
     "SlabBandRequiredError",
     "SlabBasis",
     "config_error_gate",
+    "load_corpus",
     "load_rate_card",
     "sweep",
 ]

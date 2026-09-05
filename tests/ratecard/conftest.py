@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from leakproof.ratecard import RateCardCorpus, load_rate_card
+from leakproof.ratecard import RateCardCorpus, load_corpus
 from tests.conftest import FIXTURES, SRC
 
 CORPUS = SRC / "ratecard" / "corpus"
@@ -13,12 +13,12 @@ SLAB_GAP_CORPUS = FIXTURES / "ratecard_slab_gap"
 
 @pytest.fixture(scope="session")
 def card() -> RateCardCorpus:
-    return load_rate_card()
+    return load_corpus()
 
 
 @pytest.fixture(scope="session")
 def broken_card() -> RateCardCorpus:
-    return load_rate_card(SLAB_GAP_CORPUS)
+    return load_corpus(SLAB_GAP_CORPUS)
 
 
 @pytest.fixture(scope="session")
