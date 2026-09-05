@@ -17,6 +17,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+from leakproof.ingest.parsing import parse_flexible_date
 from leakproof.types import CapabilityFact, SellerProfile
 
 
@@ -26,12 +27,16 @@ class ProfileError(ValueError):
 
 
 def _parse_date(path: Path, raw: str | None) -> date | None:
+    """G10: the same date grammar every other parser uses (``parsing.
+    parse_flexible_date``), not ``date.fromisoformat`` -- which also accepts
+    forms the spec never lists, e.g. ``20260101`` or an ISO week date like
+    ``2026-W01-1``."""
     if not raw:
         return None
-    try:
-        return date.fromisoformat(raw)
-    except ValueError as exc:
-        raise ProfileError(f"{path}: bad capability date {raw!r}: {exc}") from exc
+    parsed = parse_flexible_date(raw)
+    if parsed is None:
+        raise ProfileError(f"{path}: bad capability date {raw!r}")
+    return parsed
 
 
 def load_profile(path: Path) -> SellerProfile:
@@ -40,6 +45,7 @@ def load_profile(path: Path) -> SellerProfile:
         text = raw_bytes.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ProfileError(f"{path}: not valid UTF-8: {exc}") from exc
+    text = text.removeprefix("﻿")  # G10: strip a leading BOM, like every other parser
 
     try:
         data = json.loads(text)

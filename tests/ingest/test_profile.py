@@ -147,3 +147,38 @@ def test_non_string_seller_id_raises_profile_error_naming_the_file(tmp_path):
 
     assert str(path) in str(exc_info.value)
     assert "seller_id" in str(exc_info.value)
+
+
+# --------------------------------------------------------------------------- #
+# G10: BOM stripping and the shared date grammar, matching every other
+# parser in this package.
+# --------------------------------------------------------------------------- #
+
+
+def test_bom_valid_profile_parses_with_no_error(tmp_path):
+    content = ("﻿" + '{"seller_id": "SELLER-001", "display_name": "Test Seller"}').encode("utf-8")
+    path = tmp_path / "bom.json"
+    path.write_bytes(content)
+
+    profile = load_profile(path)
+
+    assert profile.seller_id == "SELLER-001"
+    assert profile.display_name == "Test Seller"
+
+
+@pytest.mark.parametrize("raw", ["20260101", "2026-W01-1"])
+def test_capability_date_rejects_forms_outside_the_shared_grammar(tmp_path, raw):
+    """``date.fromisoformat`` accepts these; ``parsing.parse_flexible_date``
+    (used by every other parser) does not -- the profile loader must agree."""
+    path = tmp_path / "oddate.json"
+    path.write_text(
+        '{"seller_id": "SELLER-001", "display_name": "Test Seller", '
+        f'"capabilities": [{{"name": "gst_registered", "holds": true, "valid_from": "{raw}"}}]}}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+    assert raw in str(exc_info.value)
