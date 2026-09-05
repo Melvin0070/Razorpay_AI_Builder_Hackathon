@@ -72,7 +72,9 @@ run (see the brief — this is intentional, not a seam bug).
 ### Lane I — `src/leakproof/bankleg/__init__.py` + `src/leakproof/ingest/evidence.py`
 Brief: `docs/plans/briefs/wave-2/I-bankleg.md` (complete, ready to run as-is).
 ```python
-def reconcile_payouts(headers: tuple[SettlementHeader, ...], credits: tuple[BankCredit, ...]) -> BankLegResult: ...
+def reconcile_payouts(
+    headers: tuple[SettlementHeader, ...], credits: tuple[BankCredit, ...]
+) -> BankLegResult: ...
 ```
 Plus a new `parse_evidence(path_or_text, source_file) -> EvidenceParse`
 following `docs/specs/evidence-supply.md`. D6 (bank leg excluded from match
@@ -83,8 +85,12 @@ lane — descope rung 2 if you run out of time (delete `bankleg/`, drop
 ### Lane J — `src/leakproof/detect/__init__.py` (+ new `registry.py`)
 Brief: `docs/plans/briefs/wave-2/J-detect.md` (complete, ready to run as-is).
 ```python
-def make_finding(**fields: object) -> Finding: ...   # give it real typed params
+def make_finding(**fields: object) -> Finding: ...  # give it real typed params
+
+
 DETECTORS: tuple[Detector, ...] = ()
+
+
 def run_detectors(folded: tuple[FoldedOrder, ...], ctx: DetectorContext) -> list[Finding]: ...
 ```
 **D12 wall: never import `generator/` or `labels/`.** Six detectors (classes
@@ -96,7 +102,9 @@ literal text and the ADRs are what's correct.
 ### Lane K — `src/leakproof/evidence/__init__.py`
 Brief: `docs/plans/briefs/wave-2/K-evidence.md` (complete, ready to run as-is).
 ```python
-def assess(finding: Finding, folded: FoldedOrder, profile: SellerProfile, as_of: date) -> Assessment: ...
+def assess(
+    finding: Finding, folded: FoldedOrder, profile: SellerProfile, as_of: date
+) -> Assessment: ...
 def deadline_for(mechanism: Mechanism, event_date: date | None, as_of: date) -> Deadline: ...
 ```
 **D12 wall: never import `labels/` or `generator/`.** Read ADR-0006 (SAFE-T is
@@ -114,7 +122,9 @@ signature is:
 ```python
 def dedup(findings: list[Finding]) -> tuple[Finding, ...]: ...
 def derive_state(finding: Finding, assessment: Assessment) -> StateResult: ...
-def partition(queue: tuple[TriagedFinding, ...], below_materiality: tuple[Finding, ...]) -> RupeeLines: ...
+def partition(
+    queue: tuple[TriagedFinding, ...], below_materiality: tuple[Finding, ...]
+) -> RupeeLines: ...
 def run_batch(inputs: BatchInputs, rate_card: RateCard) -> BatchReport: ...
 ```
 **`run_batch` takes raw `BatchInputs` + a `RateCard` and must itself call
@@ -135,7 +145,9 @@ Brief: `docs/plans/briefs/wave-3/M-draft.md` (written 2026-09-05, ready to
 run, signatures already match what's committed):
 ```python
 def draft_finding(item: TriagedFinding, *, model: str) -> Draft: ...
-def run_triage_job(report: BatchReport, out_dir: Path, *, model: str, resume: bool = True) -> None: ...
+def run_triage_job(
+    report: BatchReport, out_dir: Path, *, model: str, resume: bool = True
+) -> None: ...
 def check_drafts(report: BatchReport, artifacts_dir: Path) -> list[str]: ...  # D2 (a)(a′)(b)
 ```
 D2 (no rupee amounts in the prompt, three checks over committed artifacts,
@@ -215,7 +227,9 @@ Do **not** build the full N=5-seed measurement harness, throughput
 benchmarking, or `metrics/results/`. Instead, inside `metrics/__init__.py`,
 implement just enough to publish honest numbers next to the demo:
 ```python
-def score(report: BatchReport, manifest: Manifest, labels: dict[Scenario, ClaimabilityLabel]) -> dict[str, object]: ...
+def score(
+    report: BatchReport, manifest: Manifest, labels: dict[Scenario, ClaimabilityLabel]
+) -> dict[str, object]: ...
 def score_holdout(cases: tuple[HoldoutCase, ...]) -> dict[str, object]: ...
 ```
 Compute, on the one demo batch (not N=5 seeds): recall, per-class recall,
