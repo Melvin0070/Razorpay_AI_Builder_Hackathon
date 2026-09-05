@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from leakproof.contract import make_line_id
-from leakproof.ingest.bank import BANK_COLUMNS, _header_missing_hint, parse_bank
+from leakproof.ingest.bank import BANK_COLUMNS, parse_bank
 from leakproof.ingest.reasons import (
     NOT_PARSED_BAD_HEADER,
     NOT_VALID_UTF8,
@@ -109,7 +109,7 @@ def test_swapped_header_columns_quarantines_header_and_every_data_row(tmp_path):
     result = parse_bank(path)
 
     assert result.credits == ()
-    assert result.hint == _header_missing_hint()
+    assert result.hint == "no valid header row found; the bank CSV begins with 'date'"
     assert result.quarantined[0] == _q(path.name, 1, unknown_header_layout())
     assert result.quarantined[1] == _q(path.name, 2, NOT_PARSED_BAD_HEADER)
     assert result.quarantined[2] == _q(path.name, 3, NOT_PARSED_BAD_HEADER)
@@ -122,7 +122,7 @@ def test_headerless_file_drops_no_row_from_the_denominator(tmp_path):
     result = parse_bank(path)
 
     assert result.credits == ()
-    assert result.hint == _header_missing_hint()
+    assert result.hint == "no valid header row found; the bank CSV begins with 'date'"
     assert result.quarantined[0] == _q(path.name, 1, unknown_header_layout())
     assert result.quarantined[1] == _q(path.name, 2, NOT_PARSED_BAD_HEADER)
     assert len(result.quarantined) == 2
