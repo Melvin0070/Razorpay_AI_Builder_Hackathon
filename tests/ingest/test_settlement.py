@@ -501,6 +501,28 @@ def test_blank_lines_are_skipped_and_physical_numbering_is_preserved(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# G5: a data row of 24 empty tab-separated fields is malformed, not blank --
+# matching orders.py's documented rule for its own comma-separated case
+# instead of vanishing from the D7 denominator.
+# --------------------------------------------------------------------------- #
+
+
+def test_all_empty_data_row_is_malformed_not_blank(tmp_path):
+    all_empty_row = "\t".join("" for _ in SETTLEMENT_COLUMNS)
+    path = _write(
+        tmp_path,
+        "allempty.txt",
+        [HEADER_ROW, _summary_row(), all_empty_row, _order_row(**{"order-id": "ORD-2"})],
+    )
+
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == (_q(path.name, 3, amount_not_numeric("")),)
+    assert len(result.lines) == 1
+    assert result.lines[0].line_id == f"{path.name}:4"
+
+
+# --------------------------------------------------------------------------- #
 # S7: a missing summary row must not eat the first real transaction row.
 # --------------------------------------------------------------------------- #
 

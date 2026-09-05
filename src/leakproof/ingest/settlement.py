@@ -99,8 +99,15 @@ def _has_undecodable_bytes(s: str) -> bool:
 
 
 def _is_blank(raw: str) -> bool:
-    """S6: a physical line that is empty once whitespace is stripped."""
-    return raw.strip() == ""
+    """S6: a physical line with no tab-separated content at all -- the raw
+    string is empty once whitespace is stripped. A row of 24 *empty*
+    tab-separated fields is a different thing (G5): it tab-splits to more
+    than one field, so it is malformed data (every per-field check below
+    will quarantine it, typically on the empty ``amount``), matching
+    ``orders.py``'s documented rule for its own comma-separated case rather
+    than silently vanishing from the D7 denominator."""
+    fields = raw.split("\t")
+    return len(fields) == 1 and fields[0].strip() == ""
 
 
 def _all_rows_have_trailing_tab(non_blank_rows: list[str]) -> bool:
