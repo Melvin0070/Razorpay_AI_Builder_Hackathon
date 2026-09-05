@@ -12,6 +12,7 @@ from pathlib import Path
 
 from leakproof.contract import LineKind, TransactionType, make_line_id
 from leakproof.ingest.reasons import (
+    NOT_PARSED_BAD_HEADER,
     NOT_VALID_UTF8,
     amount_not_numeric,
     bad_date,
@@ -203,14 +204,69 @@ def test_missing_order_id_on_order_row(tmp_path):
 
 
 def test_unknown_header_layout(tmp_path):
+    """G2: 24 fields, all present, but not the canonical names in the
+    canonical order -- row 1's fault cascades to every other row instead of
+    letting rows 2+ parse by trusted fixed offsets."""
     shuffled = "\t".join(reversed(SETTLEMENT_COLUMNS))
     path = _write(tmp_path, "shuffled.txt", [shuffled, _summary_row(), _order_row()])
     result = parse_settlement_file(path)
 
-    assert result.quarantined[0] == _q(path.name, 1, unknown_header_layout())
+    assert result.header is None
+    assert result.lines == ()
     assert result.hint == (
         "no valid header row found; Amazon Settlement Flat File V2 begins with 'settlement-id'"
     )
+    assert result.quarantined == (
+        _q(path.name, 1, unknown_header_layout()),
+        _q(path.name, 2, NOT_PARSED_BAD_HEADER),
+        _q(path.name, 3, NOT_PARSED_BAD_HEADER),
+    )
+
+
+def test_transposed_amount_columns_in_header_cascades_no_line_emitted(tmp_path):
+    """G2: the reviewer's exact probe -- ``total-amount`` and ``amount``
+    swapped in the header, all 24 names still present. Trusting fixed
+    offsets here would silently emit +Rs 1,25,000 principal instead of
+    -Rs 487.50; the cascade must mean no SettlementLine is emitted at all."""
+    columns = list(SETTLEMENT_COLUMNS)
+    i, j = columns.index("total-amount"), columns.index("amount")
+    columns[i], columns[j] = columns[j], columns[i]
+    transposed_header = "\t".join(columns)
+    path = _write(
+        tmp_path,
+        "transposed.txt",
+        [transposed_header, _summary_row(), _order_row(amount="-487.50")],
+    )
+    result = parse_settlement_file(path)
+
+    assert result.header is None
+    assert result.lines == ()
+    assert result.quarantined == (
+        _q(path.name, 1, unknown_header_layout()),
+        _q(path.name, 2, NOT_PARSED_BAD_HEADER),
+        _q(path.name, 3, NOT_PARSED_BAD_HEADER),
+    )
+
+
+def test_saved_as_csv_reason_unchanged_by_the_header_cascade():
+    """G2: the cascade is gated on column count == 24, so the saved-as-CSV
+    file (column count 1) must still get its own column-count reason, not
+    the not-parsed-bad-header cascade reason."""
+    result = parse_settlement_file(FIXTURES / "settlement_saved_as_csv.txt")
+
+    assert result.quarantined[0].reason == column_count(24, 1, "tab")
+    assert all(q.reason != NOT_PARSED_BAD_HEADER for q in result.quarantined)
+
+
+def test_trailing_tab_reason_unchanged_by_the_header_cascade(tmp_path):
+    """G2: the cascade is gated on column count == 24, so the trailing-tab
+    file (column count 25) must still quarantine every row on the ordinary
+    column-count reason, not the not-parsed-bad-header cascade reason."""
+    rows = [HEADER_ROW + "\t", _summary_row() + "\t", _order_row() + "\t"]
+    path = _write(tmp_path, "trailingtab2.txt", rows)
+    result = parse_settlement_file(path)
+
+    assert all(q.reason == column_count(24, 25, "tab") for q in result.quarantined)
 
 
 def test_quantity_not_numeric_on_transaction_row(tmp_path):

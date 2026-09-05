@@ -29,6 +29,7 @@ from leakproof.ingest.parsing import (
     parse_plain_int,
 )
 from leakproof.ingest.reasons import (
+    NOT_PARSED_BAD_HEADER,
     NOT_VALID_UTF8,
     amount_not_numeric,
     bad_date,
@@ -160,6 +161,7 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
     # hint rule ("missing or unknown") means *this* row, not SettlementHeader.
     row1 = rows[0]
     header_row_ok = False
+    header_cascade = False
     if _has_undecodable_bytes(row1):
         quarantined.append(
             QuarantinedRow(line_id=make_line_id(source_file, 1), reason=NOT_VALID_UTF8)
@@ -175,9 +177,37 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
                 )
             )
         elif not header_row_ok:
+            # G2: 24 fields, all present, but not the canonical names in the
+            # canonical order (e.g. total-amount/amount transposed) -- row 1
+            # alone cannot say *which* columns moved where, so trusting the
+            # fixed offsets below would silently emit a wrong amount or the
+            # wrong date under a still-plausible-looking parse. Cascade
+            # exactly like orders.py/bank.py do for their own bad header,
+            # gated on the count being right so this never fires for the
+            # saved-as-CSV or trailing-tab files, whose column-count reason
+            # is the real cause (S5) and must stay the hint (wireframe
+            # frame 4 renders it verbatim).
+            header_cascade = True
             quarantined.append(
                 QuarantinedRow(line_id=make_line_id(source_file, 1), reason=unknown_header_layout())
             )
+
+    if header_cascade:
+        for physical_row, raw in enumerate(rows[1:], start=2):
+            if _is_blank(raw):
+                continue
+            quarantined.append(
+                QuarantinedRow(
+                    line_id=make_line_id(source_file, physical_row), reason=NOT_PARSED_BAD_HEADER
+                )
+            )
+        return SettlementFileParse(
+            source_file=source_file,
+            header=None,
+            lines=(),
+            quarantined=tuple(quarantined),
+            hint=_header_missing_hint(),
+        )
 
     # Row 2: is it really the summary row, or (S7) a transaction row because
     # the summary is missing from the file? A non-empty transaction-type in
