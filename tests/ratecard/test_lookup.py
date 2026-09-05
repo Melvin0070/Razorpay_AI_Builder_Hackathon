@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pytest
 
 from leakproof.contract import Disposition, LineKind
-from leakproof.ratecard import RateCardCorpus
+from leakproof.ratecard import CorpusError, RateCardCorpus, SlabBandRequiredError
 from leakproof.types import CoverageDeclaration, LookupMiss, RateRule
 
 APPAREL = "apparel"
@@ -177,9 +177,52 @@ def test_a_declared_kind_with_no_rule_in_force_is_still_a_config_error(card):
     assert APPAREL in result.detail
 
 
-def test_a_slabbed_kind_without_a_principal_raises_rather_than_guessing(card):
-    with pytest.raises(ValueError, match="band_key_paise"):
+def test_a_slabbed_kind_without_a_band_key_raises_rather_than_guessing(card):
+    with pytest.raises(SlabBandRequiredError, match="band_key_paise"):
         card.lookup(LineKind.COMMISSION, APPAREL, INSIDE)
+
+
+def test_every_slabbed_kind_is_named_on_the_corpus_and_raises_without_a_key(card):
+    """ "Always pass a band key for these kinds" is a list, not a docstring."""
+    assert set(card.slabbed_kinds) == {LineKind.COMMISSION, LineKind.FIXED_CLOSING_FEE}
+    for kind in card.slabbed_kinds:
+        with pytest.raises(SlabBandRequiredError):
+            card.lookup(kind, APPAREL, INSIDE)
+
+
+def test_the_band_required_error_is_catchable_apart_from_a_corpus_error(card):
+    """CorpusError and LineKind(value) are both ValueError; this is a caller
+    mistake with a fix of its own, so it must not be caught by the same except."""
+    assert not issubclass(SlabBandRequiredError, ValueError)
+    assert not issubclass(SlabBandRequiredError, CorpusError)
+    try:
+        card.lookup(LineKind.COMMISSION, APPAREL, INSIDE)
+    except SlabBandRequiredError as exc:
+        assert exc.kind is LineKind.COMMISSION
+        assert exc.category_id == APPAREL
+        assert exc.as_of == INSIDE
+
+
+def test_a_lone_half_open_band_resolves_without_a_band_key(card):
+    """One band in force is no choice to make. Requiring both ends open raised
+    on a corpus that was unambiguous, which sent a caller looking for a band
+    key it had no way to compute."""
+    lone = tuple(
+        r
+        for r in card.rules
+        if r.kind is LineKind.COMMISSION
+        and r.category_id == APPAREL
+        and r.slab_min_paise == 100_001
+        and r.valid_to is None
+    )
+    assert len(lone) == 1 and lone[0].slab_max_paise is None
+    card_with_one_band = RateCardCorpus(
+        rules=lone,
+        declaration=card.declaration,
+        source_path=card.source_path,
+        slab_bases=card.slab_bases,
+    )
+    assert card_with_one_band.lookup(LineKind.COMMISSION, APPAREL, INSIDE) is lone[0]
 
 
 def test_coverage_reports_exactly_the_declared_categories_and_kinds(card):

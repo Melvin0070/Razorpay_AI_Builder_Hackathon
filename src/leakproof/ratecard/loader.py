@@ -63,6 +63,26 @@ class CorpusError(ValueError):
     a well-formed corpus that cannot answer a question inside its coverage."""
 
 
+class SlabBandRequiredError(LookupError):
+    """``lookup`` was asked for a banded kind without a band key.
+
+    Its own type, and deliberately not a ``ValueError``: ``CorpusError`` and
+    ``LineKind(value)`` both raise that, and a caller catching this one is
+    catching a fixable mistake of its own (compute the band key
+    ``band_basis(kind)`` names) rather than a broken corpus. The kinds that
+    need one are ``RateCardCorpus.slabbed_kinds``.
+    """
+
+    def __init__(self, kind: LineKind, category_id: str | None, as_of: date, bands: int) -> None:
+        super().__init__(
+            f"{kind.value} for category {category_id!r} at {as_of.isoformat()} is priced in "
+            f"{bands} bands; lookup needs band_key_paise to choose one"
+        )
+        self.kind = kind
+        self.category_id = category_id
+        self.as_of = as_of
+
+
 def _parse_date(value: str, *, where: str) -> date:
     try:
         return date.fromisoformat(value)
@@ -191,7 +211,7 @@ class RateCardCorpus:
     three-argument Protocol call still type-checks and still works for every
     kind whose rule spans the whole range (fee GST, TCS, TDS, every
     acknowledgement). Asking for a banded kind without a band key is a caller
-    bug and raises ``SlabBandRequired``, rather than silently returning the
+    bug and raises ``SlabBandRequiredError``, rather than silently returning the
     lowest band: a wrong band is a wrong rupee amount, and deterministic money
     does not guess. An interface change request for the seam is in the lane
     report.
@@ -248,12 +268,14 @@ class RateCardCorpus:
             )
 
         if band_key_paise is None:
-            if len(candidates) == 1 and _is_open_slab(candidates[0]):
+            # One band in force is no choice to make, whether or not it is
+            # bounded: the earlier version demanded both ends open and so
+            # raised on an unambiguous half-open band. A key outside a lone
+            # band is a hole in the corpus, which the gate reports as a
+            # CONFIG_ERROR, not a caller mistake to raise on here.
+            if len(candidates) == 1:
                 return candidates[0]
-            raise ValueError(
-                f"{kind} for category {category_id!r} at {as_of.isoformat()} is priced in "
-                f"{len(candidates)} slabs; lookup needs band_key_paise to choose one"
-            )
+            raise SlabBandRequiredError(kind, category_id, as_of, len(candidates))
 
         matches = [r for r in candidates if _slab_contains(r, band_key_paise)]
         if len(matches) == 1:
@@ -303,6 +325,15 @@ class RateCardCorpus:
             if rule.kind is kind and rule.rule_id in bases:
                 return bases[rule.rule_id]
         return None
+
+    @property
+    def slabbed_kinds(self) -> tuple[LineKind, ...]:
+        """Kinds a caller must always pass a band key for. Discoverable rather
+        than docstring-only: ``lookup`` raises ``SlabBandRequiredError`` without one,
+        and ``band_basis(kind)`` says what figure to compute."""
+        banded = {rule_id for rule_id, _ in self.slab_bases}
+        kinds = {r.kind for r in self.rules if r.rule_id in banded}
+        return tuple(k for k in LineKind if k in kinds)
 
     @property
     def category_scoped_kinds(self) -> tuple[LineKind, ...]:
@@ -426,10 +457,6 @@ def _applies_on(rule: RateRule, on: date) -> bool:
     if on < rule.valid_from:
         return False
     return not (rule.valid_to is not None and on > rule.valid_to)
-
-
-def _is_open_slab(rule: RateRule) -> bool:
-    return rule.slab_min_paise is None and rule.slab_max_paise is None
 
 
 def _default_corpus_path() -> Path:
