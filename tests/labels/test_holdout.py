@@ -10,6 +10,8 @@ from leakproof import contract as c
 from leakproof.labels import load_holdout
 from leakproof.labels.holdout.cases import (
     ASSUMED_COMMISSION_BP,
+    H21_PRINCIPAL_PAISE,
+    H21_UNREVERSED_PAISE,
     SETTLEMENT_CYCLE_END,
     cycle_bounds,
 )
@@ -90,6 +92,20 @@ def test_commission_is_the_assumed_rate_unless_class_1_is_declared(case):
         assert charged > assumed, case.case_id
     else:
         assert charged == assumed, case.case_id
+
+
+def test_h21_still_sits_one_paisa_under_the_materiality_floor():
+    # Gap F3: H21's principal was picked so the commission on it lands on
+    # MATERIALITY_FLOOR_PAISE - 1, and nothing tied the expectation to the rate.
+    # Set ASSUMED_COMMISSION_BP to 1_400 and the case becomes a live class-5
+    # finding while still declaring expected_class None. This is the last
+    # residual rate pin, so it fails here by name rather than somewhere vaguer.
+    assert H21_UNREVERSED_PAISE == c.MATERIALITY_FLOOR_PAISE - 1, (
+        f"at {ASSUMED_COMMISSION_BP} bp on {H21_PRINCIPAL_PAISE} paise the unreversed "
+        f"commission is {H21_UNREVERSED_PAISE}; H21 needs the principal re-picked so it "
+        f"lands on {c.MATERIALITY_FLOOR_PAISE - 1}"
+    )
+    assert not c.is_material(H21_UNREVERSED_PAISE)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
@@ -175,6 +191,7 @@ def test_the_holdout_covers_the_shapes_the_brief_names():
 
     below = by_id["H21-one-paisa-below-the-floor"]
     assert below.expected_amount_paise == c.MATERIALITY_FLOOR_PAISE - 1
+    assert below.expected_amount_paise == H21_UNREVERSED_PAISE
 
     split = by_id["H04-reversal-split-across-two-lines"]
     reversals = [

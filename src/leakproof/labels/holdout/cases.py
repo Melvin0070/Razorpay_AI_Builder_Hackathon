@@ -117,6 +117,20 @@ def _commission(principal_paise: Paise, *, bp: int = ASSUMED_COMMISSION_BP) -> P
     return -apply_bp(principal_paise, bp)
 
 
+#: H21's principal, picked so that the commission on it lands exactly one paisa
+#: under the materiality floor.
+#:
+#: H21 is the one case in this module that cannot survive a move in
+#: ``ASSUMED_COMMISSION_BP``: at 1_400 bp the same principal yields ₹10.76,
+#: which is material, and the case turns from a below-materiality true negative
+#: into a live class-5 finding while still declaring ``expected_class=None``.
+#: The expectation is therefore derived from the same arithmetic the settlement
+#: line carries rather than pinned at the floor, so a rate move fails the
+#: holdout's own materiality tests loudly instead of passing green.
+H21_PRINCIPAL_PAISE: Final[Paise] = 7_685
+H21_UNREVERSED_PAISE: Final[Paise] = -_commission(H21_PRINCIPAL_PAISE)
+
+
 #: The seller in force for most cases: GST-registered without end date.
 REGISTERED: Final[SellerProfile] = SellerProfile(
     seller_id="A1SELLERIN0001",
@@ -1600,7 +1614,12 @@ H21 = HoldoutCase(
     description="Unreversed commission of ₹9.99, a single paisa under the materiality floor.",
     folded=_fold(
         "403-1000021-0000021",
-        _order("403-1000021-0000021", 21, principal_paise=7_685, tax_paise=1_383),
+        _order(
+            "403-1000021-0000021",
+            21,
+            principal_paise=H21_PRINCIPAL_PAISE,
+            tax_paise=1_383,
+        ),
         (
             _line(
                 C1_FILE,
@@ -1610,7 +1629,7 @@ H21 = HoldoutCase(
                 LineKind.PRINCIPAL,
                 "ItemPrice",
                 "Principal",
-                7_685,
+                H21_PRINCIPAL_PAISE,
                 C1_DATE,
                 "403-1000021-0000021",
             ),
@@ -1622,7 +1641,7 @@ H21 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                _commission(7_685),
+                _commission(H21_PRINCIPAL_PAISE),
                 C1_DATE,
                 "403-1000021-0000021",
             ),
@@ -1634,7 +1653,7 @@ H21 = HoldoutCase(
                 LineKind.PRINCIPAL,
                 "ItemPrice",
                 "Principal",
-                -7_685,
+                -H21_PRINCIPAL_PAISE,
                 C2_MID_DATE,
                 "403-1000021-0000021",
             ),
@@ -1650,7 +1669,7 @@ H21 = HoldoutCase(
         "queued and never inside ₹ identified. Paired with H03 it pins both sides of the "
         "floor to the paisa."
     ),
-    expected_amount_paise=MATERIALITY_FLOOR_PAISE - 1,
+    expected_amount_paise=H21_UNREVERSED_PAISE,
 )
 
 H22 = HoldoutCase(
