@@ -758,13 +758,23 @@ H07 = HoldoutCase(
 H08 = HoldoutCase(
     case_id="H08-capability-lapsed-before-the-event",
     description=(
-        "GST registration held until 2026-06-30 and declared absent from 2026-07-01; the "
-        "fee event is 2026-07-07. The Amazon-native form of the SPF/VMS case in premise P2. "
-        "A plain over-charged sale with no refund, so only class 1 can fire."
+        "GST registration held until 2026-06-30 and declared absent from 2026-07-01. Every "
+        "date this order carries — ordered 2026-07-03, delivered 2026-07-05, settled "
+        "2026-07-07 — falls after the lapse, so no reading of 'the event date' finds the "
+        "seller registered. The Amazon-native form of the SPF/VMS case in premise P2. A "
+        "plain over-charged sale with no refund, so only class 1 can fire."
     ),
     folded=_fold(
         "403-1000008-0000008",
-        _order("403-1000008-0000008", 8, principal_paise=260_000, tax_paise=0),
+        _order(
+            "403-1000008-0000008",
+            8,
+            principal_paise=260_000,
+            # Unregistered at the date of supply, so the order carries no GST.
+            tax_paise=0,
+            order_date=date(2026, 7, 3),
+            delivery_date=date(2026, 7, 5),
+        ),
         (
             _line(
                 C1_FILE,
@@ -800,10 +810,15 @@ H08 = HoldoutCase(
     expected_reason=(
         "evidence-unobtainable at step 4. The capability must be read at the event date, "
         "not at whichever fact appears first: reading the lapsed fact's holds=True passes "
-        "a seller who can no longer issue a GST tax invoice. Class 1 files through a "
-        "support ticket and has no filing window (ADR-0006), so steps 2 and 3 cannot "
-        "pre-empt step 4 at all. The order carries no refund line, so detector 5 has "
-        "nothing to fire on and the case isolates the capability question."
+        "a seller who can no longer issue a GST tax invoice. A GST tax invoice is dated "
+        "to the supply and Order.order_date is the only invoice-shaped date the pipeline "
+        "carries, so this case puts the order date, the delivery date and the settlement "
+        "posting all after the lapse; whichever a reasonable implementation picks, the "
+        "answer is the same and the case cannot be passed by choosing the convenient "
+        "date. Class 1 files through a support ticket and has no filing window "
+        "(ADR-0006), so steps 2 and 3 cannot pre-empt step 4 at all. The order carries no "
+        "refund line, so detector 5 has nothing to fire on and the case isolates the "
+        "capability question."
     ),
     expected_amount_paise=None,
 )

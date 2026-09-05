@@ -206,12 +206,24 @@ def test_the_holdout_covers_the_shapes_the_brief_names():
     assert orphan.folded.order is None
 
     lapsed = by_id["H08-capability-lapsed-before-the-event"]
-    event = min(ln.posted_date for ln in lapsed.folded.lines)
-    assert lapsed.profile.capability("gst_registration", on=event) is False
+    # Gap F4: pinning only min(posted_date) let the case pass while
+    # capability(on=order.order_date) was still True, which is the reading a
+    # GST tax invoice actually takes -- so a lane K that landed H08 on H09's
+    # answer would have scored green. Every date the pipeline could call "the
+    # event" has to give the same answer.
+    lapsed_order = lapsed.folded.order
+    candidates = {lapsed_order.order_date, lapsed_order.delivery_date} | {
+        ln.posted_date for ln in lapsed.folded.lines
+    }
+    assert len(candidates) > 1
+    for event in candidates:
+        assert lapsed.profile.capability("gst_registration", on=event) is False, event
     assert (
         lapsed.profile.capability("gst_registration", on=lapsed.folded.as_of.replace(year=2025))
         is True
     )
+    # An unregistered seller charges no GST, so the order's own tax agrees.
+    assert lapsed_order.tax_paise == 0
 
     pending = by_id["H09-registered-but-invoice-not-yet-supplied"]
     assert pending.expected_state is c.State.BLOCKED
