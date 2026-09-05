@@ -37,13 +37,14 @@ def _build_three_entry_log(tmp_path):
     return path
 
 
-def _assert_fails_gate_and_append_at_line_3(path, tmp_path, *, reason_substring):
+def _assert_fails_gate_and_append_at_line_3(path, tmp_path, *, reason_substring=None):
     result = verify_chain(path)
     assert not result.ok
     assert result.first_bad_seq == 3
     assert result.entries == 2
     assert result.detail.startswith("line 3 unparseable:")
-    assert reason_substring in result.detail
+    if reason_substring is not None:
+        assert reason_substring in result.detail
 
     gate_result = audit_chain_gate(path, tmp_path / "artifacts")
     assert not gate_result.ok
@@ -62,7 +63,17 @@ def test_truncated_tail_fails_gate_and_append(tmp_path):
     # the file in this state (the writer was cut off mid-line).
     path.write_text("\n".join([*lines[:-1], truncated]), encoding="utf-8")
 
-    _assert_fails_gate_and_append_at_line_3(path, tmp_path, reason_substring="Unterminated")
+    # C4: no reason_substring here. Slicing this fixture line at len//2
+    # happens to land inside a JSON string value today, producing
+    # json.JSONDecodeError's "Unterminated string" message -- but that is an
+    # accident of field ordering and value lengths, not a documented
+    # contract. Adding, removing, or reordering a field on AuditEntry could
+    # easily move the cut point to land elsewhere in the object (e.g. right
+    # after a ',' delimiter, producing "Expecting ',' delimiter" instead),
+    # which is exactly what happened during this fix round. The only thing
+    # actually promised here is the line-N-unparseable framing, asserted
+    # unconditionally above.
+    _assert_fails_gate_and_append_at_line_3(path, tmp_path)
 
 
 def test_garbage_line_fails_gate_and_append(tmp_path):
