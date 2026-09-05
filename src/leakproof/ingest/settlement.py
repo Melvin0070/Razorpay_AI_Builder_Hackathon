@@ -93,6 +93,24 @@ SUMMARY_ROW_MISSING_HINT = "summary row missing: row 2 is a transaction row"
 SUMMARY_ROW_BLANK_HINT = "summary row missing: row 2 is blank"
 
 
+#: G6: prefix of ``reasons.amount_not_numeric``'s output, used only to count
+#: how many rows quarantined on it -- never to reconstruct or compare the
+#: raw value.
+_AMOUNT_NOT_NUMERIC_PREFIX = "amount not numeric:"
+
+
+def _amount_separator_hint(separator: str, count: int) -> str:
+    """G6: when detection still leaves more than one row quarantined for an
+    unparsable amount, name the separator that was detected -- the file may
+    genuinely use the other one, and "amount not numeric" alone does not say
+    that a *file-wide* decimal convention, not a typo, is the likely cause."""
+    return (
+        f"{count} rows quarantined as amount not numeric: this file's decimal "
+        f"separator was detected as '{separator}' -- check the file was not "
+        "exported with the other separator"
+    )
+
+
 def _header_missing_hint() -> str:
     return (
         "no valid header row found; Amazon Settlement Flat File V2 begins "
@@ -125,15 +143,26 @@ def _all_rows_have_trailing_tab(non_blank_rows: list[str]) -> bool:
     return all(len(r.split("\t")) == 25 and r.split("\t")[-1] == "" for r in non_blank_rows)
 
 
+#: G6: how many transaction-row candidates to corroborate the fallback
+#: separator vote across, so one typo'd amount (parseable, wrong separator)
+#: cannot flip the whole file's detection and quarantine every well-formed
+#: row behind it.
+_SEPARATOR_VOTE_SAMPLE = 5
+
+
 def _detect_file_separator(summary_amount_raw: str | None, transaction_rows: list[str]) -> str:
     """S3: detect from the summary row's ``total-amount`` first; if that
     yields nothing (missing, unreadable, or the summary row itself is
-    missing/malformed), from the first transaction row whose ``amount``
-    contains ``.`` or ``,``; only then default to ``.``."""
+    missing/malformed), corroborate across up to ``_SEPARATOR_VOTE_SAMPLE``
+    transaction rows whose ``amount`` contains ``.`` or ``,`` (G6) -- majority
+    vote, ties going to ``.`` (India's convention, and the deterministic
+    fallback below); only when no candidate is found does it default to
+    ``.`` outright."""
     if summary_amount_raw is not None:
         separator = detect_separator(summary_amount_raw)
         if separator is not None:
             return separator
+    votes: list[str] = []
     for raw in transaction_rows:
         if _is_blank(raw) or _has_undecodable_bytes(raw):
             continue
@@ -141,11 +170,16 @@ def _detect_file_separator(summary_amount_raw: str | None, transaction_rows: lis
         if len(fields) < 15:
             continue
         candidate = fields[14]
-        if "." in candidate or "," in candidate:
-            separator = detect_separator(candidate)
-            if separator is not None:
-                return separator
-    return "."
+        if "." not in candidate and "," not in candidate:
+            continue
+        separator = detect_separator(candidate)
+        if separator is not None:
+            votes.append(separator)
+        if len(votes) >= _SEPARATOR_VOTE_SAMPLE:
+            break
+    if not votes:
+        return "."
+    return "." if votes.count(".") >= votes.count(",") else ","
 
 
 def parse_settlement_file(path: Path) -> SettlementFileParse:
@@ -400,6 +434,12 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
         hint = summary_missing_hint
     elif not header_row_ok:
         hint = _header_missing_hint()
+    else:
+        amount_not_numeric_count = sum(
+            1 for q in quarantined if q.reason.startswith(_AMOUNT_NOT_NUMERIC_PREFIX)
+        )
+        if amount_not_numeric_count > 1:
+            hint = _amount_separator_hint(separator, amount_not_numeric_count)
 
     return SettlementFileParse(
         source_file=source_file,

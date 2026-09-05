@@ -628,6 +628,71 @@ def test_file_with_only_a_header_row_sets_the_blank_summary_hint(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# G6: one typo'd amount must not flip the whole file's decimal separator.
+# --------------------------------------------------------------------------- #
+
+
+def test_one_typo_does_not_flip_the_corroborated_separator(tmp_path):
+    """The file is comma-decimal throughout; a single stray dot-decimal
+    amount in the first candidate row must not swing detection to '.' and
+    quarantine every genuinely comma-decimal row behind it."""
+    path = _write(
+        tmp_path,
+        "corroborate.txt",
+        [
+            HEADER_ROW,
+            _summary_row(**{"total-amount": "oops"}),  # force the transaction-row fallback
+            _order_row(**{"order-id": "ORD-1", "amount": "45.50"}),  # the one typo
+            _order_row(**{"order-id": "ORD-2", "amount": "100,00", "posted-date": "2026-08-17"}),
+            _order_row(**{"order-id": "ORD-3", "amount": "200,00", "posted-date": "2026-08-18"}),
+            _order_row(**{"order-id": "ORD-4", "amount": "300,00", "posted-date": "2026-08-19"}),
+        ],
+    )
+
+    result = parse_settlement_file(path)
+
+    # Majority of the sampled candidates are comma-decimal, so the file's
+    # separator resolves to ',': the typo'd dot-decimal row is (correctly)
+    # the only transaction row quarantined -- not the other three, which a
+    # first-candidate-wins detector would have flipped and lost.
+    reasons = {q.line_id: q.reason for q in result.quarantined}
+    assert reasons == {
+        f"{path.name}:2": amount_not_numeric("oops"),
+        f"{path.name}:3": amount_not_numeric("45.50"),
+    }
+    assert len(result.lines) == 3
+
+
+def test_undetectable_separator_hint_names_it_once_multiple_rows_quarantine(tmp_path):
+    """When every amount candidate contains *both* '.' and ',' (thousands
+    grouping plus decimal point, spec trap 1) none can corroborate a
+    separator; detection falls back to '.' and every one of these
+    genuinely-unparseable amounts quarantines -- and unlike before, the file
+    gets a hint instead of silence."""
+    path = _write(
+        tmp_path,
+        "badsep.txt",
+        [
+            HEADER_ROW,
+            _summary_row(**{"total-amount": "oops"}),
+            _order_row(**{"order-id": "ORD-1", "amount": "1,234.50"}),
+            _order_row(**{"order-id": "ORD-2", "amount": "2,345.60", "posted-date": "2026-08-17"}),
+        ],
+    )
+
+    result = parse_settlement_file(path)
+
+    assert result.header is None
+    assert len(result.quarantined) == 3  # row 2's own unparseable total-amount, plus both rows
+    assert result.lines == ()
+    assert result.hint == (
+        "3 rows quarantined as amount not numeric: this file's decimal "
+        "separator was detected as '.' -- check the file was not exported "
+        "with the other separator"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # S10(a): line_id stays physical after a quarantined middle row.
 # --------------------------------------------------------------------------- #
 
