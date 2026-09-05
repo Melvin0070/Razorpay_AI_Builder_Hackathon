@@ -31,6 +31,7 @@ from typing import Final
 from leakproof.contract import (
     DEFAULT_CYCLE_DAYS,
     MATERIALITY_FLOOR_PAISE,
+    TOLERANCE_PAISE,
     ErrorClass,
     LineKind,
     Paise,
@@ -116,6 +117,27 @@ def _commission(principal_paise: Paise, *, bp: int = ASSUMED_COMMISSION_BP) -> P
     """The signed amount of a commission line: negative, because it is a fee."""
     return -apply_bp(principal_paise, bp)
 
+
+def _rupees(paise: Paise) -> str:
+    """A ₹ figure for prose, formatted from the same integer the case carries.
+
+    The reason strings used to state their rupee figures as literals, so the
+    rate unification left H04 claiming a ₹200 shortfall the case no longer
+    contained and every test stayed green. Deriving the words from the paise
+    means a move in ``ASSUMED_COMMISSION_BP`` or in the materiality floor
+    rewrites the prose along with the numbers instead of leaving it behind.
+    """
+    whole, part = divmod(abs(paise), 100)
+    return f"₹{whole}" if part == 0 else f"₹{whole}.{part:02d}"
+
+
+#: H04's commission reversal, split unevenly across two lines in one cycle. The
+#: split is derived from the charge rather than pinned in paise so that both
+#: halves stay positive under any rate, and so that the shortfall a one-to-one
+#: matcher wrongly sees against either line is exactly the other line's amount.
+H04_CHARGE_PAISE: Final[Paise] = -_commission(400_000)
+H04_REVERSAL_A_PAISE: Final[Paise] = H04_CHARGE_PAISE * 3 // 5
+H04_REVERSAL_B_PAISE: Final[Paise] = H04_CHARGE_PAISE - H04_REVERSAL_A_PAISE
 
 #: H21's principal, picked so that the commission on it lands exactly one paisa
 #: under the materiality floor.
@@ -245,8 +267,8 @@ def _fold(
 H01 = HoldoutCase(
     case_id="H01-tolerance-under-by-one-rupee",
     description=(
-        "Refund whose commission reversal is exactly ₹1 smaller than the commission "
-        "originally charged."
+        f"Refund whose commission reversal is exactly {_rupees(TOLERANCE_PAISE)} smaller "
+        "than the commission originally charged."
     ),
     folded=_fold(
         "403-1000001-0000001",
@@ -296,7 +318,7 @@ H01 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -_commission(250_000) - 100,
+                -_commission(250_000) - TOLERANCE_PAISE,
                 C2_MID_DATE,
                 "403-1000001-0000001",
             ),
@@ -308,8 +330,8 @@ H01 = HoldoutCase(
     expected_class=None,
     expected_state=None,
     expected_reason=(
-        "The reversal is short by exactly 100 paise, which compare_paise reports as equal "
-        "at the ±₹1 tolerance. Nothing fires; the shortfall is not even below-materiality, "
+        f"The reversal is short by exactly {TOLERANCE_PAISE} paise, which compare_paise "
+        f"reports as equal at the ±{_rupees(TOLERANCE_PAISE)} tolerance. Nothing fires; the shortfall is not even below-materiality, "
         "because no discrepancy was found."
     ),
     expected_amount_paise=None,
@@ -318,8 +340,9 @@ H01 = HoldoutCase(
 H02 = HoldoutCase(
     case_id="H02-tolerance-over-by-one-rupee",
     description=(
-        "The mirror of H01: the commission reversal is exactly ₹1 larger than the "
-        "commission charged, so the tolerance is exercised on the other side of zero."
+        f"The mirror of H01: the commission reversal is exactly {_rupees(TOLERANCE_PAISE)} "
+        "larger than the commission charged, so the tolerance is exercised on the other "
+        "side of zero."
     ),
     folded=_fold(
         "403-1000002-0000002",
@@ -369,7 +392,7 @@ H02 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -_commission(250_000) + 100,
+                -_commission(250_000) + TOLERANCE_PAISE,
                 C2_MID_DATE,
                 "403-1000002-0000002",
             ),
@@ -394,7 +417,8 @@ H02 = HoldoutCase(
 H03 = HoldoutCase(
     case_id="H03-discrepancy-exactly-at-the-floor",
     description=(
-        "Partially reversed commission leaving a shortfall of exactly ₹10, the materiality floor."
+        f"Partially reversed commission leaving a shortfall of exactly "
+        f"{_rupees(MATERIALITY_FLOOR_PAISE)}, the materiality floor."
     ),
     folded=_fold(
         "403-1000003-0000003",
@@ -456,8 +480,8 @@ H03 = HoldoutCase(
     expected_class=ErrorClass.REFUND_NO_FEE_REVERSAL,
     expected_state=State.CLAIM_READY,
     expected_reason=(
-        "is_material is at-or-above the floor, so ₹10 exactly is queued and lands in "
-        "₹ identified. An implementation using a strict greater-than pushes it into "
+        f"is_material is at-or-above the floor, so {_rupees(MATERIALITY_FLOOR_PAISE)} "
+        "exactly is queued and lands in ₹ identified. An implementation using a strict greater-than pushes it into "
         "below-materiality and quietly shrinks the headline number. The refund is posted "
         "on 2026-07-10, eleven days before the batch's max settlement date, so this case "
         "sits well clear of the D20 one-cycle boundary that H26 owns: an off-by-one in "
@@ -524,7 +548,7 @@ H04 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                30_000,
+                H04_REVERSAL_A_PAISE,
                 C2_MID_DATE,
                 "403-1000004-0000004",
             ),
@@ -536,7 +560,7 @@ H04 = HoldoutCase(
                 LineKind.COMMISSION,
                 "ItemFees",
                 "Commission",
-                -_commission(400_000) - 30_000,
+                H04_REVERSAL_B_PAISE,
                 C2_MID_DATE,
                 "403-1000004-0000004",
             ),
@@ -549,10 +573,12 @@ H04 = HoldoutCase(
     expected_state=None,
     expected_reason=(
         "Reversal completeness is a sum over every reversal line on the order, not a "
-        "one-to-one line match. Matching the charge against a single line sees a ₹200 "
-        "shortfall that does not exist. The two reversal lines also share a settlement id "
-        "and a posted date, so the fold's deterministic tiebreak orders them and must not "
-        "change the outcome."
+        "one-to-one line match. The two lines together equal the "
+        f"{_rupees(H04_CHARGE_PAISE)} charged, but matching the charge against either "
+        f"alone sees a shortfall that does not exist: {_rupees(H04_REVERSAL_B_PAISE)} "
+        f"against the larger line, {_rupees(H04_REVERSAL_A_PAISE)} against the smaller. "
+        "The two reversal lines also share a settlement id and a posted date, so the "
+        "fold's deterministic tiebreak orders them and must not change the outcome."
     ),
     expected_amount_paise=None,
 )
@@ -624,8 +650,8 @@ H05 = HoldoutCase(
     expected_state=None,
     expected_reason=(
         "Detectors consume the fold across every cycle in the batch, so the cycle-3 "
-        "reversal cancels the cycle-1 finding. A per-cycle detector reports a ₹416 loss "
-        "that was repaid two cycles later."
+        "reversal cancels the cycle-1 finding. A per-cycle detector reports a "
+        f"{_rupees(_commission(320_000))} loss that was repaid two cycles later."
     ),
     expected_amount_paise=None,
 )
@@ -1312,7 +1338,7 @@ H15 = HoldoutCase(
     expected_reason=(
         "Exactly one finding, for the duplicate charge, claimed on the second line's own "
         "line_id: the rows are distinct deductions and de-duplicating them at parse time "
-        "would erase a real ₹208 loss. CLAIM-READY at step 6, and this case is why "
+        f"would erase a real {_rupees(_commission(160_000))} loss. CLAIM-READY at step 6, and this case is why "
         "ADR-0006 was taken: while class 1 filed through SAFE-T it expected "
         "BLOCKED(timing) at step 3 forever, because a plain un-refunded sale has no "
         "refund or return-scan date to start a window from. Class 1 now files through a "
@@ -1626,7 +1652,10 @@ H20 = HoldoutCase(
 
 H21 = HoldoutCase(
     case_id="H21-one-paisa-below-the-floor",
-    description="Unreversed commission of ₹9.99, a single paisa under the materiality floor.",
+    description=(
+        f"Unreversed commission of {_rupees(H21_UNREVERSED_PAISE)}, a single paisa under "
+        "the materiality floor."
+    ),
     folded=_fold(
         "403-1000021-0000021",
         _order(

@@ -4,6 +4,8 @@ as its own published line."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from leakproof import contract as c
@@ -123,7 +125,35 @@ def test_expected_class_and_state_land_in_a_real_rupee_line(case):
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
 def test_every_case_states_its_reason(case):
     assert len(case.expected_reason.split()) >= 15
-    assert case.description.strip()
+    assert len(case.description.split()) >= 8
+    assert case.description.strip() != case.expected_reason.strip()
+
+
+#: A ₹ figure with digits in it. "₹ identified" and the other rupee-line names
+#: carry no digits and are deliberately not matched.
+RUPEE_FIGURE = re.compile(r"₹(\d[\d,]*(?:\.\d{2})?)")
+
+
+def _prose_paise(figure: str) -> int:
+    whole, _, part = figure.replace(",", "").partition(".")
+    return int(whole) * 100 + int(part or 0)
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
+def test_every_rupee_figure_in_prose_is_a_number_the_case_carries(case):
+    # Gap F5: the rate unification changed H04's charge and left its reason
+    # claiming a ₹200 shortfall the case no longer contained; ₹416 and ₹208
+    # survived by luck. test_every_case_states_its_reason counts words, so
+    # nothing caught it. Every ₹ figure in prose now has to be an integer the
+    # case actually carries -- a line amount, the declared amount, or one of the
+    # two contract thresholds these cases are built on.
+    carried = {abs(ln.amount_paise) for ln in case.folded.lines}
+    carried |= {c.TOLERANCE_PAISE, c.MATERIALITY_FLOOR_PAISE}
+    if case.expected_amount_paise is not None:
+        carried.add(case.expected_amount_paise)
+    for text in (case.description, case.expected_reason):
+        for figure in RUPEE_FIGURE.findall(text):
+            assert _prose_paise(figure) in carried, (case.case_id, figure)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
