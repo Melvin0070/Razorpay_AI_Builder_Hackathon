@@ -103,18 +103,19 @@
 - **Subtitle**: Live walkthrough of Order `408-9606110-9190751` (Commission Overcharge)
 - **Visual Layout**:
   - 3-Panel Inspection Flow:
-    - **Panel 1: Source Data**: Settlement Line `settlement_2026-08-21.txt:1204` shows ₹1,200.00 commission deducted on a consumer electronics accessory.
+    - **Panel 1: Source Data**: Settlement Line `settlement_2026-08-07.txt:189` shows commission billed exceeding the published category fee schedule.
     - **Panel 2: Deterministic Recomputation**:
-      - Base order value: ₹9,998.00.
-      - Rate-card lookup (Electronics Accessories v2026-03): 8.0% slab + 18% GST = ₹943.81.
-      - Overcharge identified: **₹399.92**. Exact paise: `39992`.
+      - Category: Electronics Accessories (`ELEC-PWB-49`).
+      - Rate-card lookup: rule `amz-in-ref-2026-03-16-electronics-accessories-b3`.
+      - Expected Fee: ₹849.83.
+      - Discrepancy identified: **₹399.92**. Exact paise: `39992`.
     - **Panel 3: Generated Claim Pack**:
       - Cited Lines CSV: Pins exact physical row in marketplace settlement file.
       - Recomputation CSV: Step-by-step mathematical proof.
-      - Drafted Claim Prose: Formal dispute letter citing Amazon Fee Schedule section 3.2.
-      - Audit Proof: Cryptographic sequence `#119`, hash `a41c9f2...`.
+      - Drafted Claim Prose: D2-verified template resolved to exact paise: *"Commission was charged at a rate exceeding the published Amazon India schedule for category electronics-accessories. Recomputation is attached; requesting an adjustment of ₹399.92 to the referral fee."*
+      - Audit Proof: Cryptographic sequence `#1`, tamper-evident SHA-256 hash.
 - **Speaker Notes (40 seconds)**:
-  > "Let's examine a live claim in detail. For order 408, Amazon deducted 12% commission on an electronics accessory. LeakProof looked up the dated Amazon rate card for that category, which stipulates an 8% commission plus GST. The exact discrepancy is ₹399.92. When the merchant clicks approve, LeakProof writes a three-part Claim Pack to disk: the dispute letter, the cited settlement rows CSV, and the recomputation audit CSV. It is completely self-contained, audit-ready, and ready for automated submission to Amazon Seller Central."
+  > "Let's examine a live claim in detail. For order 408, Amazon overcharged commission on an electronics accessory. LeakProof looked up the dated Amazon rate card rule for that category, computing an expected fee of ₹849.83 and an exact discrepancy of ₹399.92. On the right, the LLM drafted the formal dispute letter using dynamic placeholder tokens—without ever seeing a rupee numeral in the prompt. When the merchant clicks approve, LeakProof writes a complete, bank-grade Claim Pack to disk and logs an immutable SHA-256 audit entry. It is completely self-contained and audit-ready."
 
 ---
 

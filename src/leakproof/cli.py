@@ -101,7 +101,26 @@ def _demo_report():
         parse_bank(directory / files["bank"]),
         parse_evidence(directory / files["evidence"]),
     )
-    return run_batch(inputs, load_rate_card()), manifest
+    report = run_batch(inputs, load_rate_card())
+    drafts_dir = Path("tests/fixtures/drafts")
+    if drafts_dir.exists():
+        from leakproof.triage import apply_drafts
+        from leakproof.types import Draft
+
+        draft_objs = {}
+        for p in sorted(drafts_dir.glob("*.json")):
+            data = json.loads(p.read_text(encoding="utf-8"))
+            draft_objs[data["finding_id"]] = Draft(
+                finding_id=data["finding_id"],
+                template_text=data["template_text"],
+                rendered_text=data["rendered_text"],
+                magnitude=data["magnitude"],
+                model=data["model"],
+                model_version=data["model_version"],
+                placeholders=tuple(data["placeholders"]),
+            )
+        report = apply_drafts(report, draft_objs)
+    return report, manifest
 
 
 def cmd_demo(_: argparse.Namespace) -> int:
@@ -144,6 +163,11 @@ def cmd_serve(_: argparse.Namespace) -> int:
     report_path = Path("out/report.json")
     if not report_path.exists():
         cmd_demo(argparse.Namespace())
+    print("\n" + "=" * 60)
+    print("  🚀 LeakProof Live Finance Controller Running!")
+    print("  👉 Open in your browser: http://127.0.0.1:8000")
+    print("  🟢 Interactive Approve, Override, Reject & Flag active")
+    print("=" * 60 + "\n")
     uvicorn.run(create_app(report_path, clock=now_iso), host="127.0.0.1", port=8000)
     return 0
 

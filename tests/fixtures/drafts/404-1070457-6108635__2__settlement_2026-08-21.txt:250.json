@@ -1,0 +1,11 @@
+{
+  "finding_id": "404-1070457-6108635|2|settlement_2026-08-21.txt:250",
+  "template_text": "Fixed closing fee was charged in excess of the published rate card schedule for this price tier. Recomputation is attached; requesting an adjustment of {{amt:settlement_2026-08-21.txt:250}} to the closing fee.",
+  "rendered_text": "Fixed closing fee was charged in excess of the published rate card schedule for this price tier. Recomputation is attached; requesting an adjustment of \u20b917.00 to the closing fee.",
+  "magnitude": "minor",
+  "model": "claude-sonnet-5",
+  "model_version": "2026-06-01",
+  "placeholders": [
+    "settlement_2026-08-21.txt:250"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "finding_id": "406-9027228-4900991|1|settlement_2026-07-31.txt:303",
+  "template_text": "Commission was charged at a rate exceeding the published Amazon India schedule for category home-kitchen. Recomputation is attached; requesting an adjustment of {{amt:settlement_2026-07-31.txt:303}} to the referral fee.",
+  "rendered_text": "Commission was charged at a rate exceeding the published Amazon India schedule for category home-kitchen. Recomputation is attached; requesting an adjustment of \u20b9299.86 to the referral fee.",
+  "magnitude": "minor",
+  "model": "claude-sonnet-5",
+  "model_version": "2026-06-01",
+  "placeholders": [
+    "settlement_2026-07-31.txt:303"
+  ]
+}

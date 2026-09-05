@@ -141,7 +141,8 @@ def check_drafts(report: BatchReport, artifacts_dir: Path) -> list[str]:
         except (KeyError, ValueError, OSError, json.JSONDecodeError) as exc:
             violations.append(f"{path}: unreadable artifact ({exc})")
             continue
-        if re.search(r"₹|\b\d{3,}\b|\b\d{1,3}(?:,\d{3})+\b", template):
+        stripped = _TOKEN.sub("", template)
+        if re.search(r"₹|\b\d{3,}\b|\b\d{1,3}(?:,\d{3})+\b", stripped):
             violations.append(f"{path}: template contains currency or numeric amount")
         allowed = set(item.finding.source_line_ids)
         for token in _TOKEN.findall(template):
@@ -149,7 +150,7 @@ def check_drafts(report: BatchReport, artifacts_dir: Path) -> list[str]:
                 violations.append(f"{path}: uncited placeholder {token!r}")
         # A plain token equal to a source amount is also forbidden, even if it
         # escaped the broader three-digit check.
-        for number in re.findall(r"\b\d+(?:\.\d+)?\b", template):
+        for number in re.findall(r"\b\d+(?:\.\d+)?\b", stripped):
             whole, dot, fraction = number.partition(".")
             value = int(whole) * 100 + int((fraction + "00")[:2]) if dot else int(whole) * 100
             if abs(value - item.finding.amount_paise) <= 100:
