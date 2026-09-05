@@ -60,6 +60,34 @@ Concurrency caps: at most six lanes per wave, at most two `lp-core` lanes at onc
 - **Research lanes**: the browse daemon cannot bind a port inside the sandbox;
   run browse commands with the sandbox disabled from the first call.
 
+## Decisions carried into every Wave 2 brief (settled at the wave open)
+
+- **TCS is the 0.5% aggregate (ADR-0008).** The design doc's 1% is the
+  statutory ceiling under s.52(1), not the notified rate. Both Wave 1
+  encodings, written independently, agree on 0.5% from 2024-07-10. A detector
+  "fixing" the code to match the doc would fire a spurious class-7 finding on
+  most of the batch.
+- **Detector 5 emits whenever the reversal is absent**, including when the
+  refund is too recent for one to have landed. The immaturity is expressed by
+  lane K as a *pending* evidence item, which puts the case at ladder step 5 as
+  BLOCKED(timing) — matching the frozen `C5_AWAITING_CYCLE` label. D20's
+  "fires only when" is loose phrasing; this is the integrator's reading and it
+  is settled. Lanes J and K were each told it, so they agree without talking.
+- **The seam grew four things at the Wave 1 close**, from lane C's and lane F's
+  interface change requests: `types.SlabBasis`, `RateRule.slab_basis`,
+  `RateCard.lookup(band_key_paise=...)` and `RateCard.band_basis(kind)`, plus
+  `HoldoutCase.batch_max_settlement_date`. A detector asks the seam which
+  figure a band is read on; it never hard-codes the mapping.
+- **`evidence.csv` is the fifth input** (`docs/specs/evidence-supply.md`).
+  Without it every SAFE-T claim blocks forever on a seller-suppliable item and
+  `C5_PLAIN` is indistinguishable from `C5_INVOICE_PENDING`. Lane I parses it,
+  lane K consumes it.
+- **A lane's signature stubs live in files the lane owns**, so extending one
+  with a defaulted keyword is not a seam change and needs no request. Lanes H
+  and K both need this; they are told so explicitly.
+- **Commit as you go.** A retroactively-written incident log corroborated none
+  of its own reflog in Wave 1. Small atomic commits through the work.
+
 ## Closing a lane
 
 1. Read the lane report. Copy its "What broke" entries into `docs/build-log.md`.

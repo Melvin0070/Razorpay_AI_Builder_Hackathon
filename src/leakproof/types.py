@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from enum import StrEnum
 from typing import Protocol
 
 from leakproof.contract import (
@@ -186,6 +187,36 @@ class BankParse:
 
 
 @dataclass(frozen=True, slots=True)
+class EvidenceSupply:
+    """One row of the seller's evidence companion file (``evidence.csv``).
+
+    The fifth input, added after Wave 1. None of the four spec'd inputs says
+    whether a seller-suppliable requirement has actually been supplied, so
+    every SAFE-T claim blocked at ladder step 5 on an item the seller may
+    already hold, with no way to say so -- ``C5_PLAIN`` and
+    ``C5_INVOICE_PENDING`` were indistinguishable from the data. This file is
+    that statement, and it is deliberately the seller's assertion rather than a
+    derived fact: ``supplied_on`` is a date the seller stands behind, not
+    something LeakProof can recompute. ``requirement`` matches
+    ``EvidenceItem.requirement`` verbatim, which is what lets lane K join them.
+    """
+
+    order_id: str
+    requirement: str
+    status: EvidenceStatus
+    supplied_on: date | None
+    source_line_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceParse:
+    source_file: str
+    supplies: tuple[EvidenceSupply, ...]
+    quarantined: tuple[QuarantinedRow, ...] = ()
+    hint: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CoverageWindow:
     """The batch's declared cycle coverage (D20). Deliveries outside it take
     the OUT_OF_WINDOW disposition. Both ends inclusive."""
@@ -211,6 +242,11 @@ class BatchInputs:
     settlements: tuple[SettlementFileParse, ...]
     profile: SellerProfile
     bank: BankParse | None = None
+    #: Absent when the seller supplied no evidence file. Lane K reads an absent
+    #: file as "nothing asserted", never as "nothing supplied": the difference
+    #: is BLOCKED(seller-action) either way, but only one of them is a claim
+    #: about the seller's filing cabinet.
+    evidence: EvidenceParse | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -218,14 +254,38 @@ class BatchInputs:
 # --------------------------------------------------------------------------- #
 
 
+class SlabBasis(StrEnum):
+    """The figure a banded rule's slab bounds are read on.
+
+    Promoted to the seam at the Wave 1 close (lane C's interface change
+    request). Amazon states this on the page each band table comes from, and
+    the two banded kinds differ, so a caller that feeds the wrong figure to
+    ``RateCard.lookup`` selects a neighbouring band and gets a fee that is
+    wrong by more than the materiality floor. The enum is vocabulary only:
+    which kind uses which basis is the corpus's own reading, answered by
+    ``RateCard.band_basis`` and never encoded here (D12).
+    """
+
+    #: Referral fee: the item's own price, i.e. a row's principal divided by
+    #: its quantity. A three-unit row bands on one unit, never on the total.
+    UNIT_ITEM_PRICE = "unit-item-price"
+    #: Fixed closing fee: the item price the buyer paid, including any shipping
+    #: or gift-wrap the seller charged.
+    BUYER_PAID_ITEM_PRICE = "buyer-paid-item-price"
+
+
 @dataclass(frozen=True, slots=True)
 class RateRule:
     """One dated, cited rule. ``category_id`` None means marketplace-wide (fee
     GST, refund administration fee, TCS, TDS). Percentages are basis points;
-    fixed amounts are paise; slabs bound the order principal, inclusive, None
-    for an open end. ``audited`` False means "known and acknowledged, not
-    audited" (a shipping fee, a promotion), which is what keeps class 8 from
-    flooding with every expected deduction (ADR-0005)."""
+    fixed amounts are paise.
+
+    **Slab bounds are not order totals.** They bound the figure ``slab_basis``
+    names, inclusive, None for an open end; a banded rule always carries one
+    and an unbanded rule never does. ``audited`` False means "known and
+    acknowledged, not audited" (a shipping fee, a promotion), which is what
+    keeps class 8 from flooding with every expected deduction (ADR-0005).
+    """
 
     rule_id: str
     kind: LineKind
@@ -238,6 +298,7 @@ class RateRule:
     valid_to: date | None
     citation: Citation
     audited: bool = True
+    slab_basis: SlabBasis | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,7 +332,28 @@ class RateCard(Protocol):
     ``ratecard/``, so detectors are coded against the seam and never import
     the corpus (D12 import test)."""
 
-    def lookup(self, kind: LineKind, category_id: str | None, as_of: date) -> RateLookup: ...
+    def lookup(
+        self,
+        kind: LineKind,
+        category_id: str | None,
+        as_of: date,
+        band_key_paise: Paise | None = None,
+    ) -> RateLookup:
+        """The rule in force, or the miss that explains why there is none.
+
+        ``band_key_paise`` is the band key for a banded kind: the figure
+        ``band_basis(kind)`` names, computed by the caller. Optional, because
+        most kinds have one rule in force and no band to choose. Asking for a
+        banded kind without one raises rather than guessing a band --
+        deterministic money does not pick the cheapest reading.
+        """
+        ...
+
+    def band_basis(self, kind: LineKind) -> SlabBasis | None:
+        """What the caller must compute to look this kind up, or None when the
+        kind is not banded. Discoverable rather than docstring-only, so a
+        detector never hard-codes which figure a band is read on."""
+        ...
 
     def coverage(self) -> CoverageDeclaration: ...
 
@@ -637,6 +719,10 @@ class HoldoutCase:
     expected_state: State | None
     expected_reason: str
     expected_amount_paise: Paise | None = None
+    #: The batch max settlement date a ``DetectorContext`` built from this case
+    #: should carry. None means "use ``folded.as_of``", which is the convention
+    #: lane F authored every case on (``labels/holdout/cases.py`` docstring).
+    batch_max_settlement_date: date | None = None
 
 
 # --------------------------------------------------------------------------- #

@@ -211,29 +211,51 @@ compute the labels checksum and write `FROZEN_LABELS_SHA256` into `contract.py`
 Lane K's agent is a different agent from Lane F's, by construction. Exit: findings
 flow end to end on the demo batch (no states yet); reviewer pass; tag `wave-2`.
 
-### Wave 3 — Assembly, drafting, measurement (3 lanes)
+**Reprioritization (2026-09-05):** waves now front-load whatever the live demo
+path needs and push pure measurement/testing lanes to the end. Rationale: a
+silent bug in `triage`/`draft`/`gate` breaks the judge's `make demo` run; a
+late or thin `metrics/` harness does not — it costs polish on the README
+table, not the demo itself. Concretely, **N** (metrics + throughput) and **Q**
+(measurement runs) moved out of Waves 3–4 and into Wave 5, next to the
+existing QA/ship checklist they belong with. Nothing else changed: the lane
+ownership, tiers, and data-dependency ordering (H/J/K before L/M before O/P)
+are exactly as designed in Wave 0.
+
+### Wave 3 — Assembly and drafting (2 lanes)
 
 | Lane | Owns | Tier | Governed by | Ships |
 |---|---|---|---|---|
 | **L** triage pipeline | `triage/`, `cli.py` wiring (with integrator) | A Fable | D19, D10, D3, D4, state ladder, rupee partition, queue sort | dedup on `(order_id, class, claimed_line_id \| null)`; 15-pair overlap matrix, executable; per-order sum invariant; 7-step ladder as ordered code; partition as a pure function of (class-bucket, state); property tests (hypothesis): both additivity identities, exactly-one-state, sum invariant, partition purity; `BatchReport` assembly; `run_batch()` |
 | **M** LLM drafter | `draft/` | B Opus | D2, D11, D1 | prompt with `{{amt:<line_id>}}` placeholders and magnitude bucket only; substitution layer; per-finding resumable artifacts recording model + version; checks (a) (a′) (b) as verify-time tests over committed artifacts; zero network in verify; provider per ADR-0004 |
-| **N** metrics + throughput | `metrics/` | A Fable | D10, D12 (holdout line), D13, D9 | recall, per-class recall, precision, value-weighted recall, ₹-agreement with every disagreement listed, strict + adjusted match rate with the delta reconciled, holdout line, baseline row, N=5 mean ± range, `metrics.json`, README table generator; 10k throughput measured and asserted at ~3× measured |
 
-Exit: `make verify` reproduces every published number with no network and no key;
-tag `wave-3`.
+Exit: triage assembles claim-ready/blocked/unexplained states end to end on the
+demo batch and the drafter produces claim text for every CLAIM_READY finding;
+reviewer pass; tag `wave-3`. (Published-number reproduction moves to Wave 5,
+once `metrics/` exists.)
 
-### Wave 4 — Gate, artifacts, demo (3 lanes)
+### Wave 4 — Gate and the working demo (2 lanes)
 
 | Lane | Owns | Tier | Governed by | Ships |
 |---|---|---|---|---|
 | **O** gate + claim pack | `gate/`, and now `dashboard/serve.py` (ownership transfers from G) | B Opus | D8, D21, D16 | approve idempotent; override names the blocker kind (four fixed labels), marks pack OVERRIDDEN, records `approve_override` + `state_before`, never enters ₹ claim-ready; FLAG for UNEXPLAINED writes an audit entry only; **pack first, audit entry second**; claim pack = claim text + cited rows CSV + recomputation CSV; no-network test |
 | **P** triage run + demo artifacts | `artifacts/` | integrator + Sonnet | D16, D11 | `make triage` on the demo batch with the user's key in env (never read by any agent), commit artifacts, `make demo` end to end keyless, D2 checks green, parity test green |
+
+This is the core-path finish line: everything the judge actually sees
+(`clone`, `make demo`, double-click) is working by the end of this wave.
+
+Exit: judge path works with nothing installed; tag `wave-4`.
+
+### Wave 5 — Measurement and ship
+
+Now that the demo works, spend this wave on the numbers behind it and the
+testing/QA pass — none of it gates the demo, all of it gates the submission.
+
+| Lane | Owns | Tier | Governed by | Ships |
+|---|---|---|---|---|
+| **N** metrics + throughput | `metrics/` | A Fable | D10, D12 (holdout line), D13, D9 | recall, per-class recall, precision, value-weighted recall, ₹-agreement with every disagreement listed, strict + adjusted match rate with the delta reconciled, holdout line, baseline row, N=5 mean ± range, `metrics.json`, README table generator; 10k throughput measured and asserted at ~3× measured |
 | **Q** measurement runs | `metrics/results/` | C Sonnet | D9, D13 | N=5 measurement runs published as measured; 10k throughput on this machine; CI threshold set; README tables |
 
-Exit: judge path (`clone`, `make demo`, double-click) works with nothing installed;
-tag `wave-4`.
-
-### Wave 5 — Ship
+Then the ship checklist:
 
 - README (Sonnet): limitations verbatim from the design doc, reproduction steps,
   metrics tables, architecture diagram (`/diagram`), pointer to the build log.
@@ -245,6 +267,9 @@ tag `wave-4`.
 - TODOS.md deferred design passes only if time remains.
 - Video storyboard and recording checklist against the 5-minute script (the user
   records). Tag `v1.0.0`; GitHub release with `demo.html` and `metrics.json` attached.
+
+Exit: `make verify` reproduces every published number with no network and no
+key; full QA/security pass done; `v1.0.0` tagged and released.
 
 Wall-clock estimate, assuming lanes take one to three hours and waves merge cleanly:
 roughly two to three working days, leaving buffer inside a one-week window. Treat as
