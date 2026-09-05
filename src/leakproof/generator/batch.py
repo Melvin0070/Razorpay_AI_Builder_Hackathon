@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import Final
 
 from leakproof.contract import (
+    CATEGORY_NODES,
     DEFAULT_CYCLE_DAYS,
     MATERIALITY_FLOOR_PAISE,
     TOLERANCE_PAISE,
@@ -745,7 +746,7 @@ class _Builder:
         charged = fees.commission_at_bp(u, q, bp)
         note = (
             f"commission {_pct(bp)} charged ({why}) vs {_pct(correct_bp)} for "
-            f"{fees.CATEGORY_NODES[plan.category_id]!r} on {_units(plan)} (unit price band); "
+            f"{CATEGORY_NODES[plan.category_id]!r} on {_units(plan)} (unit price band); "
             f"overcharge excludes the GST that follows it"
         )
         return charged, note
@@ -932,7 +933,8 @@ class _Builder:
             ),
             Scenario.C5_WINDOW_DATE_MISSING: (
                 "the refund rows carry no posted-date, so no line gives the window's start date; "
-                "the refund is known only from orders.csv refund_initiated_by"
+                "the parser quarantines those rows (bad posted-date) and the refund is then known "
+                "only from orders.csv refund_initiated_by"
             ),
             Scenario.C5_GST_UNREGISTERED: (
                 f"every date of the order precedes the seller's GST registration on "
