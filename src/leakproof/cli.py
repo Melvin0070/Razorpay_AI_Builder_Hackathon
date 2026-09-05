@@ -10,6 +10,10 @@ from __future__ import annotations
 import argparse
 import sys
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from leakproof.gates import Gate
 
 #: Commands whose lane has not merged yet, with the issue that tracks it.
 NOT_BUILT: dict[str, tuple[str, int]] = {
@@ -27,10 +31,23 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def hard_gates() -> list[Gate]:
+    """Composition root for the hard gates (D10).
+
+    Lane gates are registered here rather than in ``gates.py`` because that
+    module is imported by walled packages, so a lane import there would make
+    every walled package reach that lane and fail the D12 wall test. Nothing
+    imports ``cli``, so it can see everything (lane C, Wave 1).
+    """
+    from leakproof.gates import BASE_GATES
+
+    return [*BASE_GATES]
+
+
 def cmd_verify(_: argparse.Namespace) -> int:
     from leakproof.gates import run_hard_gates
 
-    results = run_hard_gates()
+    results = run_hard_gates(hard_gates())
     for r in results:
         print(f"[{'ok' if r.ok else 'FAIL'}] {r.name}: {r.detail}")
     failed = [r for r in results if not r.ok]
