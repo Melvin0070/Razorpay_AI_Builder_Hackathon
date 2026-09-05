@@ -59,6 +59,4 @@ def test_every_line_kind_except_unclassified_is_reachable_from_the_tables():
 def test_category_identifiers_are_pinned_to_one_node_each():
     assert set(c.CATEGORY_NODES) == {"electronics-accessories", "home-kitchen", "apparel"}
     assert len(set(c.CATEGORY_NODES.values())) == 3
-    assert all(
-        " - " in node or node == "Electronics Accessories" for node in c.CATEGORY_NODES.values()
-    )
+    assert all(" - " in node for node in c.CATEGORY_NODES.values())

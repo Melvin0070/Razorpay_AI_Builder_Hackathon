@@ -27,8 +27,10 @@ Concurrency caps: at most six lanes per wave, at most two `lp-core` lanes at onc
 ## Decisions carried into every Wave 1 and Wave 2 brief (from the Wave 0 research)
 
 - **Category identifiers are pinned to one Amazon.in fee-category node each**
-  (`contract.CATEGORY_NODES`): `electronics-accessories` → "Electronics
-  Accessories"; `home-kitchen` → "Kitchen - Cookware, Tableware & Dinnerware";
+  (`contract.CATEGORY_NODES`): `electronics-accessories` → "Accessories -
+  Electronics, PC and Wireless" (corrected 2026-09-04: no node named "Electronics
+  Accessories" exists on the live page, RS3 §1 was wrong on that name; lanes B and
+  C confirmed); `home-kitchen` → "Kitchen - Cookware, Tableware & Dinnerware";
   `apparel` → "Apparel - Shirts". Lanes B and C encode that node's own tiers,
   never an umbrella (RS3 §1).
 - **Three 2026 fee effective dates exist**: March 16, June 10, September 7.
