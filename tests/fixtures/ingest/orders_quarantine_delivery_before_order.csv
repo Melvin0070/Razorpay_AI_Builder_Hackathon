@@ -1,0 +1,2 @@
+order_id,sku,category_id,quantity,principal_paise,tax_paise,order_date,delivery_date,refund_initiated_by
+ORD-9,SKU-9,electronics-accessories,1,10000,500,2026-08-15,2026-08-10,none
