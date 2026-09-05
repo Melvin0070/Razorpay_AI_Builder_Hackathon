@@ -15,7 +15,10 @@ Timeline conventions (all relative to the cycles, never to a clock):
 
 * ``cycle_count`` weekly settlement cycles end on ``as_of``; each cycle's
   file is ``settlement_<end-date>.txt`` and its bank credit lands
-  ``DEPOSIT_LAG_DAYS`` after the cycle end.
+  ``DEPOSIT_LAG_DAYS`` after the cycle end. Every settlement pays out:
+  ordinary sales are steered to whichever cycle the seeded refunds have
+  pushed below ``NET_MARGIN_PAISE``, and a spec too small to cover them is
+  refused with a ``ValueError`` naming the cycle.
 * ``as_of`` is the batch's maximum posted-date by construction (D18): the
   reserve row posted on the last cycle's end date pins it there, and an
   explicit ``as_of`` moves the whole timeline so the last cycle ends on it.
@@ -78,6 +81,9 @@ DEFAULT_CYCLE_COUNT: Final[int] = 4
 MIN_CYCLES_WITH_SCENARIOS: Final[int] = 4
 DEPOSIT_LAG_DAYS: Final[int] = 2
 RESERVE_BP: Final[int] = 500
+#: A settlement must pay out (one bank credit per cycle, D6), so ordinary
+#: traffic is steered to any cycle whose running total sits below this.
+NET_MARGIN_PAISE: Final[Paise] = 25_000
 #: D10: every seeded error is at least twice the materiality floor.
 MATERIAL_SEED_FLOOR: Final[Paise] = 2 * MATERIALITY_FLOOR_PAISE
 #: Sale dates precede the refund by this many days at most in a seeded refund case.
@@ -366,6 +372,8 @@ class _Builder:
         )
         self.orders: list[OrderPlan] = []
         self.used_ids: set[str] = set()
+        #: Running total per cycle, reserve included, kept as blocks are posted.
+        self.net: dict[int, Paise] = {c.index: 0 for c in self.cycles}
 
     # ------------------------------------------------------------------ world
 
@@ -594,8 +602,7 @@ class _Builder:
             shipment_id=plan.shipment_id,
             order_item_code=plan.order_item_code,
         )
-        plan.blocks.append(block)
-        return block
+        return self._post(plan, block)
 
     def _refund_block(
         self,
@@ -640,8 +647,7 @@ class _Builder:
             order_item_code=plan.order_item_code,
             undated=undated,
         )
-        plan.blocks.append(block)
-        return block
+        return self._post(plan, block)
 
     def _reversal_block(self, plan: OrderPlan, posted: date) -> v2.Block:
         """A commission reversal posted on its own in a later cycle."""
@@ -663,8 +669,7 @@ class _Builder:
             shipment_id=plan.shipment_id,
             order_item_code=plan.order_item_code,
         )
-        plan.blocks.append(block)
-        return block
+        return self._post(plan, block)
 
     def _adjustment_block(self, plan: OrderPlan, posted: date, line: v2.Line) -> v2.Block:
         cycle = self._cycle_for(posted)
@@ -682,8 +687,32 @@ class _Builder:
             order_item_code=plan.order_item_code,
             adjustment_id=f"ADJ{self._alnum(10)}",
         )
+        return self._post(plan, block)
+
+    def _post(self, plan: OrderPlan, block: v2.Block) -> v2.Block:
+        """Attach a block to its order and keep the per-cycle running total.
+        A sale's principal feeds this cycle's reserve and the next cycle's
+        release, so the running total tracks the file total to within the
+        reserve's rounding."""
         plan.blocks.append(block)
+        k = block.cycle_index
+        self.net[k] += sum(line.amount for line in block.lines)
+        if block.tag == "sale":
+            reserve = apply_bp(plan.principal, RESERVE_BP)
+            self.net[k] -= reserve
+            if k + 1 in self.net:
+                self.net[k + 1] += reserve
         return block
+
+    def _background_cycle(self) -> Cycle:
+        """The cycle with the lowest running total while any sits below the
+        margin, otherwise a random one. The scenarios concentrate refunds in
+        the last cycles; ordinary sales have to cover them or the settlement
+        cannot pay out."""
+        lowest = min(self.cycles, key=lambda c: (self.net[c.index], c.index))
+        if self.net[lowest.index] < NET_MARGIN_PAISE:
+            return lowest
+        return self.rng.choice(self.cycles)
 
     # ------------------------------------------------------------- ordinary
 
@@ -694,7 +723,7 @@ class _Builder:
         unit_price = self._pick_unit_price(category)
         quantity = self._pick_quantity()
         shipping, gift_wrap = self._pick_extras()
-        cycle = self.rng.choice(self.cycles)
+        cycle = self._background_cycle()
         order_date, delivery, posted = self._sale_dates(cycle)
         plan = self._new_plan(
             category,
@@ -1228,7 +1257,12 @@ class _Builder:
                 file_name=cycle.file_name,
             )
             if rendered.total <= 0:
-                raise AssertionError(f"settlement {cycle.settlement_id} total is not positive")
+                raise ValueError(
+                    f"settlement {cycle.settlement_id} ({cycle.file_name}) totals "
+                    f"{format_paise(rendered.total)}: order_count {spec.order_count} is too "
+                    f"small to cover the refunds seeded in that cycle; raise order_count or "
+                    f"lower the scenario counts"
+                )
             malformed = spec.malformed_last_settlement and cycle is self.last
             v2.write_settlement(
                 out_dir / cycle.file_name, rendered, delimiter="," if malformed else "\t"

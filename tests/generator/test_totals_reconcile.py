@@ -13,6 +13,7 @@ from hypothesis import strategies as st
 
 from leakproof.contract import MATERIALITY_FLOOR_PAISE
 from leakproof.generator import generate_batch, load_manifest, v2
+from leakproof.generator.batch import BatchSpec, generate
 from leakproof.generator.money import format_paise
 from leakproof.scenarios import SCENARIOS, Scenario, ScenarioKind
 from tests.generator.reading import Batch
@@ -73,10 +74,10 @@ def test_reserve_rows_close_every_cycle(demo: Batch):
         previous = current[0].amount
 
 
-@settings(max_examples=20, deadline=None)
+@settings(max_examples=30, deadline=None)
 @given(
     seed=st.integers(min_value=0, max_value=10**6),
-    order_count=st.integers(min_value=30, max_value=90),
+    order_count=st.integers(min_value=30, max_value=120),
     errors_per_class=st.integers(min_value=0, max_value=3),
 )
 def test_batch_invariants_hold_for_arbitrary_specs(
@@ -107,3 +108,10 @@ def test_batch_invariants_hold_for_arbitrary_specs(
         for entry in manifest.seeded:
             for line_id in entry.line_ids:
                 assert batch.row(line_id)
+
+
+def test_a_spec_whose_refunds_no_sale_can_cover_is_refused_by_name(tmp_path: Path):
+    """Two orders, both refunded, nothing else: the refund cycle cannot pay out."""
+    spec = BatchSpec("tiny", 5, 2, {Scenario.C5_PLAIN: 1, Scenario.C5_AWAITING_CYCLE: 1})
+    with pytest.raises(ValueError, match="too small to cover the refunds"):
+        generate(spec, tmp_path)
