@@ -43,3 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="leakproof gen", description=__doc__)
     add_arguments(parser)
     return run(parser.parse_args(argv))
+
+
+if __name__ == "__main__":  # pragma: no cover - until cli.py wires `gen`
+    raise SystemExit(main())
