@@ -228,18 +228,23 @@ class RateCardCorpus:
         selects a neighbouring band and produces a fee that is wrong by more
         than the materiality floor.
         """
-        uncovered = self._coverage_miss(kind, category_id, as_of)
+        uncovered = self._coverage_miss(kind, category_id, as_of) or self._kind_miss(
+            kind, category_id, as_of
+        )
         if uncovered is not None:
             return uncovered
 
         candidates = self.rules_for(kind, category_id, as_of)
         if not candidates:
+            # The kind is declared, so the corpus claims to answer for it and
+            # this cell is a hole in that claim: a missing window, or a
+            # category the schedule was never encoded for.
             return self._config_error(
                 kind,
                 category_id,
                 as_of,
                 band_key_paise,
-                "no rule and no acknowledgement in the corpus",
+                "the corpus declares this kind but has no rule in force here",
             )
 
         if band_key_paise is None:
@@ -319,6 +324,13 @@ class RateCardCorpus:
     def covers(self, category_id: str | None, as_of: date) -> bool:
         return self._coverage_miss(LineKind.UNCLASSIFIED, category_id, as_of) is None
 
+    def declares(self, kind: LineKind) -> bool:
+        """Whether the corpus claims to answer for this kind at all, audited or
+        acknowledged. The structural test behind the class-8 hole: a caller
+        holding only the frozen seam reads the same fact off ``coverage()``."""
+        d = self.declaration
+        return kind in d.audited_kinds or kind in d.acknowledged_kinds
+
     def _coverage_miss(
         self, kind: LineKind, category_id: str | None, as_of: date
     ) -> LookupMiss | None:
@@ -344,6 +356,32 @@ class RateCardCorpus:
                 detail=(
                     f"as_of {as_of.isoformat()} is outside the declared coverage window "
                     f"[{d.valid_from.isoformat()}, {end}]"
+                ),
+            )
+        return None
+
+    def _kind_miss(self, kind: LineKind, category_id: str | None, as_of: date) -> LookupMiss | None:
+        """Coverage misses that depend on the kind, kept out of ``covers``.
+
+        Both are limitations, not corpus bugs, and both must stay out of
+        CONFIG_ERROR: the gate fails the build on that disposition, and a build
+        that fails for a hole the corpus never claimed to fill would make the
+        gate unrunnable rather than informative.
+        """
+        d = self.declaration
+        if not self.declares(kind):
+            # ADR-0005 decision 2: a kind with neither rule nor acknowledgement
+            # is the deliberate class-8 hole (code-known-no-rule), reached
+            # through this miss. Callers tell it apart from an unknown category
+            # by testing the kind against coverage(), never by reading detail.
+            return LookupMiss(
+                disposition=Disposition.UNCOVERED,
+                kind=kind,
+                category_id=category_id,
+                as_of=as_of,
+                detail=(
+                    f"{kind.value} is outside the declared coverage: the corpus declares "
+                    f"neither an audited rule nor an acknowledgement for it"
                 ),
             )
         # A settlement line whose order is absent from the seller's export (the

@@ -132,16 +132,49 @@ def test_an_acknowledged_kind_returns_a_rule_that_is_not_audited(card):
         assert rule.percent_bp is None and rule.fixed_paise is None, kind
 
 
-def test_a_known_kind_with_no_rule_is_a_config_error_not_a_silent_pass(card):
-    """LineKind.TECHNOLOGY_FEE is deliberately absent (C8_CODE_KNOWN_NO_RULE).
-
-    The detector reaches that scenario through the empty lookup, so the miss
-    must be loud: inside declared coverage it is CONFIG_ERROR, and the gate
-    does not sweep undeclared kinds, so nothing here fails the build.
-    """
+def test_an_undeclared_kind_is_uncovered_because_the_hole_is_deliberate(card):
+    """LineKind.TECHNOLOGY_FEE is deliberately absent (ADR-0005 decision 2,
+    C8_CODE_KNOWN_NO_RULE), so the miss is a declared limitation and not a
+    corpus bug: CONFIG_ERROR here would put a real count on the dashboard for
+    a seeded error that must land as an ordinary class-8 finding, while
+    make verify reported zero and the README said a config error fails the
+    build."""
     result = card.lookup(LineKind.TECHNOLOGY_FEE, APPAREL, INSIDE, 150_000)
     assert isinstance(result, LookupMiss)
+    assert result.disposition is Disposition.UNCOVERED
+
+
+def test_the_class_8_hole_is_readable_off_the_seam_not_off_the_detail_prose(card):
+    """What lane J tests to reach code-known-no-rule: the kind is absent from
+    both declared lists. Nothing in this path parses a sentence."""
+    coverage = card.coverage()
+    declared = set(coverage.audited_kinds) | set(coverage.acknowledged_kinds)
+    assert LineKind.TECHNOLOGY_FEE not in declared
+    assert not card.declares(LineKind.TECHNOLOGY_FEE)
+    assert card.declares(LineKind.COMMISSION)
+
+
+def test_a_declared_kind_with_no_rule_in_force_is_still_a_config_error(card):
+    """CONFIG_ERROR keeps its meaning: a hole INSIDE what the corpus claims.
+
+    The apparel commission schedule with its 2026 window deleted is a corpus
+    the gate must fail, and it is one edit away from the packaged one.
+    """
+    surviving = tuple(
+        r
+        for r in card.rules
+        if not (r.kind is LineKind.COMMISSION and r.category_id == APPAREL and r.valid_to is None)
+    )
+    holed = RateCardCorpus(
+        rules=surviving,
+        declaration=card.declaration,
+        source_path=card.source_path,
+        slab_bases=card.slab_bases,
+    )
+    result = holed.lookup(LineKind.COMMISSION, APPAREL, INSIDE, 150_000)
+    assert isinstance(result, LookupMiss)
     assert result.disposition is Disposition.CONFIG_ERROR
+    assert APPAREL in result.detail
 
 
 def test_a_slabbed_kind_without_a_principal_raises_rather_than_guessing(card):
