@@ -403,9 +403,15 @@ build), and `quarantine` (malformed rows, with reasons).
   eligibility rule is coded. The generator's fee logic and the detector's
   rate-card config are two separate encodings of the same public sources, enforced
   by an import test asserting the generator's module graph never reaches the
-  rate-card config. A 25-case hand-authored adversarial holdout (cases the
+  rate-card config. A 26-case hand-authored adversarial holdout (cases the
   generator never produces) guards against correlated misunderstanding; scored and
   published as its own line, never merged into headline recall/precision.
+
+  Published beside that line: **class 5 carries 8 of the 16 frozen labels and is
+  the only class touching ladder steps 1-5**, a consequence of ADR-0006. A single
+  systematic error in the class-5 eligibility rules therefore moves six labels
+  together. The holdout partly compensates -- H08 at step 4, H09 and H23 at step
+  5, all class 1 -- but the concentration is real and is stated, not corrected.
 
   **Known limit, stated here and in the README:** this independence is real for
   *fee arithmetic* (two encodings of a public rate card) and weaker for
@@ -530,7 +536,7 @@ Day 3   S8  detectors 1, 2, 5, 6, 7, 8                           (D23)
 
 Day 4   S10 eligibility + evidence table + deadline arithmetic   (D14, D18)
         S11 precedence ladder + rupee partition + property tests (D10)
-        adversarial holdout, 25 cases                            (D12)
+        adversarial holdout, 26 cases                            (D12)
 
 Day 5   S14 LLM drafter, placeholders in and out, resumable      (D2, D11)
         S15 gate: approve / override / reject → claim pack       (D8)
