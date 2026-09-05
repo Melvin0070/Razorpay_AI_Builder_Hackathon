@@ -30,10 +30,29 @@ this order:
 
 | Column | Type | Required | Meaning |
 |---|---|---|---|
-| `order_id` | string | yes | Joins to `Order.order_id`. An id absent from the orders export is not an error here: it is quarantined with that reason, because a supply statement about an unknown order cannot be attached to a finding. |
+| `order_id` | string | yes | Joins to `Order.order_id`. An id absent from the orders export is **not** checked here: like every other parser in `ingest/`, this one reads one file and knows nothing of the others (`bank.py` does not know the settlements either). The unknown-id quarantine belongs to batch assembly, which is the first place both files are in hand — see "Where the cross-file check lives" below. |
 | `requirement` | string | yes | Matches `EvidenceItem.requirement` **verbatim**, byte for byte. This is the join key lane K uses, and a near-miss is a silent no-op, so the parser preserves the string exactly (no case folding, no whitespace normalisation beyond stripping the surrounding field) and lane K's join is exact. |
 | `status` | enum | yes | One of `satisfied`, `missing`, `pending` — the three values of `contract.EvidenceStatus`, spelled as the enum's own values. Anything else quarantines the row naming the literal string. |
 | `supplied_on` | date or empty | conditional | `YYYY-MM-DD`. **Required when `status` is `satisfied`**, and empty otherwise. A satisfied requirement with no date is quarantined: an undated assertion cannot be checked against a filing window, and silently accepting it would push a claim to CLAIM-READY on evidence of unknown age. A date on a `missing` or `pending` row is also quarantined — it means the file disagrees with itself. |
+
+### Where the cross-file check lives
+
+A supply row naming an order that appears in no export cannot be attached to
+any finding, so it must be quarantined and counted — D7 puts the quarantine
+count on screen beside the match rate, and a row that silently survives into
+lane K's join is a row missing from that count.
+
+It is quarantined at **batch assembly** (lane L, Wave 3), not in the parser.
+The parser takes one file and one file only, which is the house style every
+Wave 1 parser follows, and it has no way to know what the orders export
+contains. The earlier wording of the `order_id` row above said the parser did
+this; it never could, and lane I's parser correctly does not. Assembly holds
+both parses, so the check is one set membership there, with the reason string
+naming the unknown id.
+
+Until that lands, an unknown-id row parses cleanly and then matches nothing:
+a no-op in lane K rather than a wrong claim, which is why this is a Wave 3
+item and not a Wave 2 defect.
 
 Example:
 
