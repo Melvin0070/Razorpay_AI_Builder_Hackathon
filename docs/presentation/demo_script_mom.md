@@ -31,7 +31,9 @@ This document is the exact second-by-second script and visual choreography for y
 >
 > *Worse, marketplaces enforce a strict 60-day deadline. If you don't catch an overcharge with cited evidence, that money is permanently gone.*
 >
-> *Incumbent tools try to solve this by dumping thousands of unverified alerts on finance teams—most of which are rejected by Amazon. Today, we built **LeakProof**: an autonomous marketplace auditor that proves what you can actually recover, and tells you exactly what blocks the rest."*
+> *Incumbent tools try to solve this by dumping thousands of unverified alerts on finance teams—most of which are rejected by Amazon. Today, we built **LeakProof**: an autonomous marketplace auditor that proves what you can actually recover, and tells you exactly what blocks the rest.*
+>
+> *In direct compliance with Razorpay's Track 04 brief, our 150-order transaction batch is generated synthetically with 20 seeded ground-truth errors—protecting seller confidentiality while rigorously stress-testing edge cases. But critically, every fee slab, category commission, and SAFE-T policy we test against is 100% real, dated Amazon India policy."*
 
 ---
 
@@ -45,7 +47,7 @@ This document is the exact second-by-second script and visual choreography for y
 - *1:15 – 2:00*: Switch browser to `out/demo.html`. Full-screen dashboard showing the top summary bar and metrics strip. Point your cursor to the Match Rate chip and the 4 Rupee cards.
 
 **Spoken Script:**
-> *"Let's see it live. In our terminal, I run `make demo`. In under 150 milliseconds, with zero network calls and no API key required, LeakProof ingests 150 orders, folds multi-cycle settlement lines, executes our detection suite, assesses filing evidence, and renders this self-contained dashboard.*
+> *"Let's see it live. In our terminal, I run `make demo`. In under 150 milliseconds, with zero network calls and no API key required, LeakProof ingests 150 orders across 4 weekly settlement cycles, folds multi-cycle settlement lines, executes our detection suite, assesses filing evidence, and renders this self-contained dashboard.*
 >
 > *Notice our headline reconciliation rates: we report two distinct match rates out loud.*
 > *Our **Strict Match Rate is 96.7%**—145 out of 150 orders matched cleanly.*
@@ -101,7 +103,7 @@ This document is the exact second-by-second script and visual choreography for y
 >
 > *Look at Order 405: ₹629 was deducted, but because our engine detects that the seller initiated the return, Amazon's SAFE-T policy explicitly bars recovery. We mark it NOT-CLAIMABLE. We don't sell false hope.*
 >
-> *In our terminal, running `make metrics` proves our empirical rigor: **90% recall**, **100% rupee agreement**, and our **26-case frozen holdout** reported completely honestly at 53.8% on its own line—never blended into marketing numbers."*
+> *In our terminal, running `make metrics` proves our empirical rigor. Because our transaction batch is seeded with ground-truth errors while using real Amazon rate cards, we can prove our numbers with mathematical certainty: **90% recall**, **100% rupee agreement**, and our **26-case frozen holdout** reported completely honestly at 53.8% on its own line—never blended into marketing numbers."*
 
 ---
 
