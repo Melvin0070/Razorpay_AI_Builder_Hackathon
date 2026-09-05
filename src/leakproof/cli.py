@@ -40,8 +40,9 @@ def hard_gates() -> list[Gate]:
     imports ``cli``, so it can see everything (lane C, Wave 1).
     """
     from leakproof.gates import BASE_GATES
+    from leakproof.ratecard.gate import config_error_gate
 
-    return [*BASE_GATES]
+    return [*BASE_GATES, config_error_gate]
 
 
 def cmd_verify(_: argparse.Namespace) -> int:
