@@ -5,14 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from leakproof.contract import RefundInitiator, make_line_id
-from leakproof.ingest.orders import ORDERS_COLUMNS, parse_orders
+from leakproof.ingest.orders import ORDERS_COLUMNS, _header_missing_hint, parse_orders
 from leakproof.ingest.reasons import (
     DELIVERY_BEFORE_ORDER,
+    NOT_PARSED_BAD_HEADER,
+    NOT_VALID_UTF8,
     amount_not_numeric,
     bad_date,
     column_count,
     missing_field,
+    principal_negative,
     quantity_not_numeric,
+    quantity_not_positive,
+    tax_negative,
+    unknown_header_layout,
     unknown_refund_initiated_by,
 )
 from leakproof.types import QuarantinedRow
@@ -147,3 +153,153 @@ def test_unknown_refund_initiated_by(tmp_path):
 
     assert result.orders == ()
     assert result.quarantined == (_q(path.name, 2, unknown_refund_initiated_by("courier")),)
+
+
+# --------------------------------------------------------------------------- #
+# S12: non-positive quantity, negative principal/tax.
+# --------------------------------------------------------------------------- #
+
+
+def test_quantity_not_positive(tmp_path):
+    path = _write(tmp_path, "qty0.csv", [HEADER_ROW, _row(quantity="0")])
+    result = parse_orders(path)
+
+    assert result.orders == ()
+    assert result.quarantined == (_q(path.name, 2, quantity_not_positive("0")),)
+
+
+def test_quantity_negative_is_not_positive(tmp_path):
+    path = _write(tmp_path, "qtyneg.csv", [HEADER_ROW, _row(quantity="-1")])
+    result = parse_orders(path)
+
+    assert result.orders == ()
+    assert result.quarantined == (_q(path.name, 2, quantity_not_positive("-1")),)
+
+
+def test_principal_negative(tmp_path):
+    path = _write(tmp_path, "principalneg.csv", [HEADER_ROW, _row(principal_paise="-50000")])
+    result = parse_orders(path)
+
+    assert result.orders == ()
+    assert result.quarantined == (_q(path.name, 2, principal_negative("-50000")),)
+
+
+def test_tax_negative(tmp_path):
+    path = _write(tmp_path, "taxneg.csv", [HEADER_ROW, _row(tax_paise="-2500")])
+    result = parse_orders(path)
+
+    assert result.orders == ()
+    assert result.quarantined == (_q(path.name, 2, tax_negative("-2500")),)
+
+
+# --------------------------------------------------------------------------- #
+# S2: exact header-name match, not just column count. On mismatch nothing is
+# parsed by guessed position.
+# --------------------------------------------------------------------------- #
+
+
+def test_swapped_header_columns_quarantines_header_and_every_data_row(tmp_path):
+    """principal_paise and tax_paise swapped in the header: same column
+    count, wrong names -- must not silently mis-assign money."""
+    swapped = (
+        "order_id,sku,category_id,quantity,tax_paise,principal_paise,"
+        "order_date,delivery_date,refund_initiated_by"
+    )
+    path = _write(tmp_path, "swapped.csv", [swapped, _row(), _row(order_id="ORD-2")])
+
+    result = parse_orders(path)
+
+    assert result.orders == ()
+    assert result.hint == _header_missing_hint()
+    assert result.quarantined[0] == _q(path.name, 1, unknown_header_layout())
+    assert result.quarantined[1] == _q(path.name, 2, NOT_PARSED_BAD_HEADER)
+    assert result.quarantined[2] == _q(path.name, 3, NOT_PARSED_BAD_HEADER)
+    assert len(result.quarantined) == 3
+
+
+def test_headerless_file_drops_no_row_from_the_denominator(tmp_path):
+    """No header row at all: row 1 is real data, but it does not match the
+    canonical column names, so it is quarantined like every other row --
+    never silently treated as the header and dropped."""
+    path = _write(tmp_path, "headerless.csv", [_row(order_id="ORD-1"), _row(order_id="ORD-2")])
+
+    result = parse_orders(path)
+
+    assert result.orders == ()
+    assert result.hint == _header_missing_hint()
+    assert result.quarantined[0] == _q(path.name, 1, unknown_header_layout())
+    assert result.quarantined[1] == _q(path.name, 2, NOT_PARSED_BAD_HEADER)
+    assert len(result.quarantined) == 2
+
+
+def test_correct_header_parses_normally(tmp_path):
+    path = _write(tmp_path, "correct.csv", [HEADER_ROW, _row()])
+    result = parse_orders(path)
+
+    assert result.hint is None
+    assert result.quarantined == ()
+    assert len(result.orders) == 1
+
+
+# --------------------------------------------------------------------------- #
+# S1: undecodable bytes quarantine only their own row.
+# --------------------------------------------------------------------------- #
+
+
+def test_undecodable_byte_quarantines_only_that_row(tmp_path):
+    bad_row = (
+        _row(order_id="ORD-BAD", sku="PLACEHOLDER")
+        .encode("utf-8")
+        .replace(b"PLACEHOLDER", b"Caf\xe9")
+    )
+    good_row = _row(order_id="ORD-2").encode("utf-8")
+    path = tmp_path / "badutf8.csv"
+    path.write_bytes(b"\n".join([HEADER_ROW.encode(), bad_row, good_row]) + b"\n")
+
+    result = parse_orders(path)
+
+    assert result.quarantined == (_q(path.name, 2, NOT_VALID_UTF8),)
+    assert len(result.orders) == 1
+    assert result.orders[0].source_line_id == f"{path.name}:3"
+
+
+# --------------------------------------------------------------------------- #
+# S4: a leading UTF-8 BOM does not turn a valid file into "unknown header
+# layout".
+# --------------------------------------------------------------------------- #
+
+
+def test_bom_valid_orders_file_parses_with_no_quarantine(tmp_path):
+    content = ("﻿" + HEADER_ROW + "\n" + _row() + "\n").encode("utf-8")
+    path = tmp_path / "bom.csv"
+    path.write_bytes(content)
+
+    result = parse_orders(path)
+
+    assert result.quarantined == ()
+    assert result.hint is None
+    assert len(result.orders) == 1
+
+
+# --------------------------------------------------------------------------- #
+# S6: blank lines are skipped, never quarantined, and physical numbering
+# survives them.
+# --------------------------------------------------------------------------- #
+
+
+def test_blank_lines_are_skipped_and_physical_numbering_is_preserved(tmp_path):
+    rows = [
+        HEADER_ROW,
+        _row(order_id="ORD-1"),
+        "",  # interior blank line
+        _row(order_id="ORD-2"),
+        "",  # trailing blank line
+    ]
+    path = _write(tmp_path, "blank.csv", rows)
+
+    result = parse_orders(path)
+
+    assert result.quarantined == ()
+    assert len(result.orders) == 2
+    assert result.orders[0].source_line_id == f"{path.name}:2"
+    assert result.orders[1].source_line_id == f"{path.name}:4"
