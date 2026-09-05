@@ -15,7 +15,6 @@
     "home-kitchen": "Kitchen - Cookware, Tableware & Dinnerware",
     "apparel": "Apparel - Shirts"
   },
-  "category_node_divergences": {
-    "electronics-accessories": "contract.CATEGORY_NODES pins this identifier to \"Electronics Accessories\". No node of that name exists in the Amazon.in referral-fee table as read on 2026-09-04: the only two candidates are \"Car Electronics Accessories\", which sits in the Automotive group, and \"Accessories - Electronics, PC and Wireless\", which sits in the group RS3 section 1 names for this identifier, \"Electronics (Camera, Mobile, PC, Wireless) & Accessories\". The corpus encodes the latter and records the divergence here rather than encoding a rate under a node name that does not exist. Interface change request in the lane report: CATEGORY_NODES should read \"Accessories - Electronics, PC and Wireless\"."
-  }
+  "category_node_divergences": {},
+  "category_node_divergences_note": "Empty, and the mechanism stays: a category whose encoded node differs from contract.CATEGORY_NODES must record the reason here, or the coverage declaration is false in exactly the way D17 exists to prevent. The one divergence this corpus carried at first read, electronics-accessories, was resolved in contract.py: CATEGORY_NODES now pins \"Accessories - Electronics, PC and Wireless\", the node the referral-fee table actually lists."
 }
