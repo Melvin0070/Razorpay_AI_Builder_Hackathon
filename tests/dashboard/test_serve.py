@@ -21,10 +21,18 @@ FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "batch_report.
 
 
 class _FakeAuditLog:
-    """Stands in for ``leakproof.audit.AuditLog`` in dispatch tests: the real
-    one also raises ``NotImplementedError`` from its own methods, and every
-    ``leakproof.gate.*`` stub raises before touching the log at all, so a
-    bare object with no behaviour is enough to prove that."""
+    def __init__(self) -> None:
+        self.entries: list[dict] = []
+        self._seq = 1
+
+    def next_seq(self) -> int:
+        return self._seq
+
+    def append(self, **kwargs) -> int:
+        self.entries.append(kwargs)
+        seq = self._seq
+        self._seq += 1
+        return seq
 
 
 def test_create_app_import_error_message_when_fastapi_missing():
@@ -44,13 +52,57 @@ def test_find_finding_locates_a_real_row_and_misses_an_unknown_one():
     assert serve.find_finding(REPORT, "nonexistent|1|-") is None
 
 
-@pytest.mark.parametrize("action", ["approve", "override", "reject", "flag"])
-def test_dispatch_gate_action_surfaces_not_implemented(action):
-    """Every gate action is still a Wave-4 stub; the route (below) translates
-    this into HTTP 501 naming the lane and issue."""
-    finding_id = REPORT.queue[0].finding.finding_id
-    with pytest.raises(NotImplementedError, match="lane O"):
-        serve.dispatch_gate_action(action, finding_id, REPORT, _FakeAuditLog(), Path("out/claims"))
+def test_dispatch_gate_action_approve(tmp_path):
+    from leakproof.contract import State
+
+    claim_ready_id = next(
+        item.finding.finding_id for item in REPORT.queue if item.state.state is State.CLAIM_READY
+    )
+    log = _FakeAuditLog()
+    pack = serve.dispatch_gate_action("approve", claim_ready_id, REPORT, log, tmp_path)
+    assert pack is not None
+    assert pack.exception_id == claim_ready_id
+    assert len(log.entries) == 1
+
+
+def test_dispatch_gate_action_override(tmp_path):
+    from leakproof.contract import State
+
+    blocked_id = next(
+        item.finding.finding_id for item in REPORT.queue if item.state.state is State.BLOCKED
+    )
+    log = _FakeAuditLog()
+    pack = serve.dispatch_gate_action("override", blocked_id, REPORT, log, tmp_path)
+    assert pack is not None
+    assert pack.exception_id == blocked_id
+    assert pack.overridden is True
+    assert len(log.entries) == 1
+
+
+def test_dispatch_gate_action_reject():
+    from leakproof.contract import AuditAction, State
+
+    claim_ready_id = next(
+        item.finding.finding_id for item in REPORT.queue if item.state.state is State.CLAIM_READY
+    )
+    log = _FakeAuditLog()
+    res = serve.dispatch_gate_action("reject", claim_ready_id, REPORT, log, Path("out/claims"))
+    assert res is None
+    assert len(log.entries) == 1
+    assert log.entries[0]["action"] == AuditAction.REJECT
+
+
+def test_dispatch_gate_action_flag():
+    from leakproof.contract import AuditAction, State
+
+    unexplained_id = next(
+        item.finding.finding_id for item in REPORT.queue if item.state.state is State.UNEXPLAINED
+    )
+    log = _FakeAuditLog()
+    res = serve.dispatch_gate_action("flag", unexplained_id, REPORT, log, Path("out/claims"))
+    assert res is None
+    assert len(log.entries) == 1
+    assert log.entries[0]["action"] == AuditAction.FLAG
 
 
 def test_dispatch_gate_action_unknown_action():
