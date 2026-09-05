@@ -1,11 +1,12 @@
 """Lookup semantics: two honest miss dispositions, never one (D17)."""
 
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
 
 from leakproof.contract import Disposition, LineKind
-from leakproof.ratecard import CorpusError, RateCardCorpus, SlabBandRequiredError
+from leakproof.ratecard import CorpusError, RateCardCorpus, SlabBandRequiredError, sweep
 from leakproof.types import CoverageDeclaration, LookupMiss, RateRule
 
 APPAREL = "apparel"
@@ -175,6 +176,62 @@ def test_a_declared_kind_with_no_rule_in_force_is_still_a_config_error(card):
     assert isinstance(result, LookupMiss)
     assert result.disposition is Disposition.CONFIG_ERROR
     assert APPAREL in result.detail
+
+
+def _with(card, rules):
+    return RateCardCorpus(
+        rules=rules,
+        declaration=card.declaration,
+        source_path=card.source_path,
+        slab_bases=card.slab_bases,
+    )
+
+
+def test_overlapping_slabs_are_a_config_error_naming_both_bands(card):
+    """The other half of a broken slab set, and the half no fixture carries.
+
+    A gap answers nothing; an overlap answers twice, and picking either match
+    would be a coin flip between two rupee amounts. Both are holes inside
+    declared coverage, so both are CONFIG_ERROR and both name their rules.
+    """
+    bands = card.rules_for(LineKind.COMMISSION, APPAREL, INSIDE)
+    upper = max(bands, key=lambda r: r.slab_min_paise or 0)
+    lower = min(bands, key=lambda r: r.slab_min_paise or 0)
+    widened = replace(upper, slab_min_paise=0)
+    overlapping = _with(card, tuple(widened if r is upper else r for r in card.rules))
+
+    result = overlapping.lookup(LineKind.COMMISSION, APPAREL, INSIDE, 40_000)
+    assert isinstance(result, LookupMiss)
+    assert result.disposition is Disposition.CONFIG_ERROR
+    assert "overlapping slabs" in result.detail
+    assert lower.rule_id in result.detail
+    assert widened.rule_id in result.detail
+
+
+def test_an_overlap_fails_the_gate_too(card):
+    """Otherwise the branch is reachable only from a hand-written lookup."""
+    bands = card.rules_for(LineKind.COMMISSION, APPAREL, INSIDE)
+    upper = max(bands, key=lambda r: r.slab_min_paise or 0)
+    overlapping = _with(
+        card, tuple(replace(r, slab_min_paise=0) if r is upper else r for r in card.rules)
+    )
+    misses = sweep(overlapping)
+    assert misses
+    assert all("overlapping slabs" in m.detail for m in misses)
+
+
+def test_a_kind_with_a_marketplace_wide_rule_is_never_category_scoped(card):
+    """The subtraction in ``category_scoped_kinds``: a kind the corpus also
+    prices marketplace-wide answers a lookup with no category from the
+    fallback, so it must not be reported as needing one. Nothing in the
+    packaged corpus prices a kind both ways, so the branch is built here."""
+    wide = card.lookup(LineKind.FEE_TAX, None, INSIDE)
+    assert isinstance(wide, RateRule) and wide.category_id is None
+    both_ways = _with(card, (*card.rules, replace(wide, rule_id="x-fee-gst", category_id=APPAREL)))
+
+    assert LineKind.FEE_TAX not in both_ways.category_scoped_kinds
+    assert LineKind.COMMISSION in both_ways.category_scoped_kinds
+    assert both_ways.lookup(LineKind.FEE_TAX, None, INSIDE) is wide
 
 
 def test_a_slabbed_kind_without_a_band_key_raises_rather_than_guessing(card):
