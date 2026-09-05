@@ -1,0 +1,10 @@
+{
+  "exception_id": "e-100",
+  "path": "packs/e-100.json",
+  "claim_text": "fixture pack, not a real claim -- see golden.jsonl seq 3",
+  "cited_rows_csv": "order_id,line_id,field,value\nORD-100,L1,amount_paise,150000\n",
+  "recomputation_csv": "step,description,amount_paise\n1,seeded fixture recomputation,150000\n",
+  "state_before": "CLAIM-READY",
+  "audit_seq": 3,
+  "overridden": false
+}

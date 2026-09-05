@@ -1,0 +1,43 @@
+{
+  "source": {
+    "label": "The Finance (No. 2) Act, 2024, section 61, as published in the Gazette of India: \"In section 194-O of the Income-tax Act, in sub-section (1), for the words 'one per cent.', the figures and word '0.1 per cent.' shall be substituted with effect from the 1st day of October, 2024.\"",
+    "url": "https://egazette.gov.in/WriteReadData/2024/256436.pdf",
+    "as_of": "2026-09-04",
+    "verified": true
+  },
+  "note": "Section 194-O writes its rate into the section text, so the amending Finance Act is the primary source for the rate itself; no separate CBDT notification is needed for the figure. incometaxindia.gov.in and pib.gov.in are bot-blocked to this tooling (RS3 open item 6), so the Gazette PDF is the anchor. The settlement file posts it as (ItemWithheldTax, TDS (Section 194-O)) -> LineKind.TDS.",
+  "rules": [
+    {
+      "rule_id": "itax-194o-pre-2024-10-01",
+      "kind": "tds",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": 100,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2020-10-01",
+      "valid_to": "2024-09-30",
+      "audited": true,
+      "citation": {
+        "label": "The Finance (No. 2) Act, 2024, section 61, establishes that the words replaced on 1 October 2024 were \"one per cent.\". The START of this window, 1 October 2020, is the commencement of section 194-O itself, which was NOT read from a primary source in this session, so this rule is verified:false on its window rather than on its rate.",
+        "url": "https://egazette.gov.in/WriteReadData/2024/256436.pdf",
+        "as_of": "2026-09-04",
+        "verified": false
+      }
+    },
+    {
+      "rule_id": "itax-194o-2024-10-01",
+      "kind": "tds",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": 10,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2024-10-01",
+      "valid_to": null,
+      "audited": true
+    }
+  ]
+}

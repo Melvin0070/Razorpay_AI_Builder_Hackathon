@@ -1,21 +1,376 @@
-"""Hash-chained, append-only audit log. Lane E · Tier C · issue #8.
+"""Hash-chained, append-only audit log (D21). Lane E · Tier C · issue #8.
 
 Governed by D21 and the D8 ordering rule (pack first, entry second). Owns
-this package. Chain verification recomputes hashes, never compares bytes.
+this package. Chain verification recomputes hashes, never compares bytes:
+byte comparison against a golden log would fail on every rerun and break
+D18's reproducibility guarantee (the same batch, run twice, produces entries
+that agree on every *field* but differ in ``ts``).
+
+Canonical JSON (the exact bytes that get hashed), so lane O and the metrics
+harness can reproduce it independently rather than only through this module:
+
+1. Take the entry, drop its own ``hash`` field.
+2. Project every remaining field to a JSON-safe value (``_project`` below,
+   owned by this module — NOT ``leakproof.serialize.to_jsonable``, whose
+   docstring disclaims audit canonicalisation and whose derived-field table
+   is keyed by dataclass class name, so a later change there must not be
+   able to silently change a hash already committed to disk): enums by their
+   ``.value`` string, ``datetime.date`` as ``.isoformat()``, everything else
+   as-is.
+3. ``json.dumps(obj, sort_keys=True, separators=(",", ":"),
+   ensure_ascii=False)`` — sorted keys and no incidental whitespace so the
+   same entry always serialises to the same bytes regardless of field
+   insertion order.
+
+Hash rule: ``sha256(canonical_json(entry - hash).encode("utf-8") +
+prev_hash.encode("ascii")).hexdigest()``. Genesis ``prev_hash`` is 64 ``"0"``
+characters. ``seq`` starts at 1 and increments by exactly one per entry.
+
+Storage: one JSON object per physical line (JSONL) at ``AuditLog(path)``.
+``append`` only ever opens the file in append mode, writes one line, flushes,
+and fsyncs — it never reads the whole file back in to rewrite it, and never
+truncates. Reopening an existing log (a fresh ``AuditLog`` instance pointing
+at the same path) picks its next ``seq``/``prev_hash`` up from whatever is
+on disk, so there is no in-memory state to lose between runs.
+
+Single writer, always. This module assumes exactly one process appends to a
+given log path at a time (the CLI, or the served gate, but never both at
+once) and does no locking to enforce that. There is no atomicity between
+``head()``'s read and ``append()``'s write, so two writers racing produce two
+entries with the same ``seq`` and ``prev_hash`` — a real failure, but one
+``verify_chain`` reports as a duplicate/out-of-order ``seq`` rather than one
+this module prevents at write time. ``head()`` is defined as "the last
+physical line", not "the entry with the highest ``seq``": under the
+single-writer assumption those always agree, but a second writer that
+appended out of turn would make them disagree, and ``verify_chain`` — not
+``append`` — is what catches a reorder like that, by recomputing the whole
+chain rather than trusting whichever entry happens to be last on disk.
+
+``append`` only ever refuses to continue past an *unreadable tail*: it calls
+``head()`` to find the current ``seq``/``prev_hash``, and if the current last
+line cannot be parsed, there is no correct pair to continue from, so it
+raises rather than guessing. A corrupt line in the *middle* of the file is a
+different story — ``head()`` never reads it (it only reads the tail; see
+``_read_tail_line_fast``), so ``append`` keeps landing new, individually
+well-formed entries at the next ``seq`` while ``verify_chain``/the gate stay
+red the whole time, because they scan every line from the start. This is
+correct and intended, not a bug: the gate is what a human is meant to be
+watching, not a reason to make every append pay for a full-file scan.
+
+SECURITY.md is explicit that this makes the log tamper-*evident*, not
+tamper-*proof*: anyone with write access to the file can rewrite an entry and
+re-chain everything after it by hand. Verification catches an edit that was
+NOT re-chained — the common case, and the one a hard gate can act on.
+
+Malformed content (a truncated last line from an interrupted write — including
+one cut off mid multi-byte UTF-8 character, the canonical shape of an
+interrupted write on a non-ASCII field — a garbage line, a line missing a
+required key, a bad enum value, or the log path itself being a directory) is
+a fact about the file, not a bug in the caller: ``entries()``, ``head()`` and
+``append()`` never let ``json.JSONDecodeError``/``UnicodeDecodeError``/
+``KeyError``/``ValueError``/``TypeError``/``IsADirectoryError`` escape from a
+bad line or bad path. They raise the single typed
+:class:`AuditLogCorruptError` instead. ``verify_chain`` and
+``audit_chain_gate`` in turn never raise on file content at all — a bad line
+is reported as a normal, non-ok :class:`ChainVerification`/``GateResult``
+naming the physical line and why, so a corrupt log fails the gate rather than
+crashing ``make verify``.
+
+Orphan-pack resolution (``_resolve_artifact``, used when ``verify_chain`` is
+given ``artifacts_root``) rejects a path that escapes ``artifacts_root`` via
+``Path.resolve()``, which follows symlinks — so a symlink placed *inside*
+``artifacts_root`` that points *outside* it is rejected too, not just a
+literal ``..`` segment. A deployment that symlinks its packs directory
+somewhere else will fail the gate rather than silently passing.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
+import json
+import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Any, Final
 
 from leakproof.contract import AuditAction, Paise, State
+from leakproof.gates import GateResult
 from leakproof.types import AuditEntry
+
+#: Genesis previous-hash: 64 zero characters, one per sha256 hex digit.
+GENESIS_PREV_HASH: Final[str] = "0" * 64
+
+#: Exceptions a malformed on-disk line can raise while being parsed back
+#: into an AuditEntry: bad JSON, a missing field, a value of the wrong
+#: shape for its field, or an enum string that names no member.
+_PARSE_ERRORS: Final[tuple[type[Exception], ...]] = (
+    json.JSONDecodeError,
+    KeyError,
+    ValueError,
+    TypeError,
+)
+
+
+class AuditLogCorruptError(ValueError):
+    """Raised by :meth:`AuditLog.entries`, :meth:`AuditLog.head` and
+    :meth:`AuditLog.append` when a physical line in the on-disk log cannot be
+    parsed back into an ``AuditEntry`` — bad JSON, undecodable bytes, a
+    missing key, a value the wrong shape, or an enum string that names no
+    member — or when the log path itself is a directory.
+
+    The log is append-only and cannot be repaired in place: there is no
+    "rewrite just this line" operation, because doing so without also
+    re-chaining every entry after it is exactly the tampering the hash chain
+    exists to catch. A corrupt line must be investigated (and, if it truly
+    needs fixing, fixed by a human who understands the chain implications)
+    before appending is safe to resume — ``append`` refuses to append past a
+    line it cannot read, since it cannot otherwise determine the correct
+    ``seq``/``prev_hash`` to continue from.
+    """
+
+    def __init__(self, line_no: int, reason: str, *, parsed: int) -> None:
+        self.line_no = line_no
+        self.reason = reason
+        #: Count of entries successfully parsed before this break (blank
+        #: lines are skipped by entries() and never counted here). This is
+        #: what verify_chain reports as ChainVerification.entries on this
+        #: path, and parsed + 1 is what it reports as first_bad_seq (C2:
+        #: those two used to be derived from line_no, which over-counts by
+        #: one per blank line silently skipped by entries(), and which names
+        #: a physical line number where first_bad_seq is documented to carry
+        #: a seq).
+        self.parsed = parsed
+        super().__init__(
+            f"audit log corrupt at line {line_no}: {reason}. The log is "
+            "append-only and cannot be repaired in place — investigate "
+            "before appending continues."
+        )
+
+
+#: Ceiling for _read_tail_line_fast's backward-read window. Tests pass a
+#: small value here (as chunk_size) to exercise the multi-chunk loop without
+#: a huge fixture.
+_DEFAULT_TAIL_CHUNK_SIZE: Final[int] = 65536
+
+#: First backward-read window, before doubling up to chunk_size. A real
+#: log's last line is on the order of a few hundred bytes, so almost every
+#: call finds it in this one small window instead of paying for the full
+#: chunk_size ceiling every time (C3: measured 34880/50208/57873 bytes read
+#: per append at n=200/400/800 before this constant existed, converging on
+#: the 64 KiB ceiling because a fixed-size window reads the whole window
+#: even when the line it is looking for is far smaller).
+_INITIAL_TAIL_WINDOW: Final[int] = 4096
+
+
+def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SIZE) -> str | None:
+    """Read only the last newline-terminated line of ``path``, seeking from
+    the end and growing the read window (doubling, capped at ``chunk_size``,
+    starting from ``_INITIAL_TAIL_WINDOW``) until a newline is found — used
+    by ``AuditLog.head`` to avoid parsing every earlier line just to find the
+    current head, which used to make a whole log's worth of appends cost
+    O(n^2) (each of n appends re-parsed all entries so far to find the tail).
+    This is NOT a single minimal-sized read: on a typical short last line it
+    reads the first ``_INITIAL_TAIL_WINDOW`` bytes (still comfortably more
+    than one line) and stops there; only an unusually long last line grows
+    the window further, up to ``chunk_size``. The cost is bounded and
+    independent of how many entries already exist in the file (constant, not
+    quadratic) — the actual property ``head()``/``append()`` need.
+
+    Returns ``None`` when it cannot confidently identify a complete last
+    line: an empty file, a file whose last byte is not a newline (a write
+    interrupted mid-line, or simply a file this function should not guess
+    about), a path that is a directory, or a last line whose bytes are not
+    valid UTF-8 (a write interrupted mid-multibyte-character). The caller
+    falls back to the accurate, fully-parsed path in every such case rather
+    than trusting a partial or undecodable read.
+    """
+    size = path.stat().st_size
+    if size == 0:
+        return None
+    try:
+        raw_fh = path.open("rb")
+    except IsADirectoryError:
+        return None
+    with raw_fh as fh:
+        fh.seek(-1, os.SEEK_END)
+        if fh.read(1) != b"\n":
+            return None
+        chunk = b""
+        pos = size
+        window = min(_INITIAL_TAIL_WINDOW, chunk_size)
+        while pos > 0:
+            step = min(window, pos)
+            pos -= step
+            fh.seek(pos)
+            chunk = fh.read(step) + chunk
+            body = chunk[:-1]  # drop the one trailing newline confirmed above
+            idx = body.rfind(b"\n")
+            if idx != -1 or pos == 0:
+                try:
+                    return body[idx + 1 :].decode("utf-8")
+                except UnicodeDecodeError:
+                    return None
+            window = min(window * 2, chunk_size)
+    return None  # unreachable: the loop above always returns once pos == 0
+
+
+def _describe_parse_error(exc: Exception) -> str:
+    """Turn one of ``_PARSE_ERRORS`` into a human-readable reason. KeyError's
+    default ``str()`` is just the missing key's repr (e.g. ``'seq'``), which
+    reads as a typo without context; every other error's message already
+    names what was wrong."""
+    if isinstance(exc, KeyError):
+        return f"missing key {exc}"
+    return str(exc)
+
+
+def _project(entry: AuditEntry) -> dict[str, Any]:
+    """The twelve-field, JSON-safe projection of ``entry`` (``hash``
+    included — callers that need it excluded, i.e. ``canonical_json``, pop it
+    themselves). Owned entirely by this module rather than delegating to
+    ``leakproof.serialize.to_jsonable``: that function's docstring says audit
+    canonicalisation is not its job, and its ``_DERIVED`` table injects extra
+    keys by dataclass class name — an unrelated future change there would
+    silently change every hash already committed to disk, and the chain
+    verifier would then accuse the operator of tampering. Enums by
+    ``.value``, ``date`` by ``.isoformat()``, everything else as-is."""
+    return {
+        "seq": entry.seq,
+        "prev_hash": entry.prev_hash,
+        "hash": entry.hash,
+        "ts": entry.ts,
+        "as_of": entry.as_of.isoformat(),
+        "actor": entry.actor,
+        "action": entry.action.value,
+        "exception_id": entry.exception_id,
+        "state_before": entry.state_before.value if entry.state_before is not None else None,
+        "state_after": entry.state_after.value if entry.state_after is not None else None,
+        "amount_paise": entry.amount_paise,
+        "artifact_path": entry.artifact_path,
+    }
+
+
+def canonical_json(entry: AuditEntry) -> str:
+    """The exact string that gets hashed for ``entry``: every field except
+    ``hash`` itself, projected to JSON-safe values (see ``_project``) and
+    dumped with sorted keys and no incidental whitespace. See the module
+    docstring for why this exact recipe, and reproduce it exactly rather than
+    approximating it."""
+    payload = _project(entry)
+    payload.pop("hash", None)
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        # A lone surrogate (e.g. actor="\ud800", half of a split UTF-16
+        # pair with no partner) round-trips fine through json.dumps with
+        # ensure_ascii=False, since json's encoder does not validate
+        # surrogate pairing, but cannot be encoded to bytes to be hashed or
+        # written to disk. Fail loudly and specifically here rather than
+        # letting a bare UnicodeEncodeError escape from deep inside append().
+        raise ValueError(
+            "audit entry contains text that is not valid UTF-8 (a lone "
+            "surrogate code point) and cannot be hashed"
+        ) from exc
+    return text
+
+
+def compute_hash(entry: AuditEntry, prev_hash: str) -> str:
+    """``sha256(canonical_json(entry) + prev_hash)`` hex digest.
+
+    ``entry.hash`` itself is never read here — ``canonical_json`` strips it —
+    so callers building a not-yet-hashed entry may pass any placeholder
+    (empty string is conventional) in that field.
+    """
+    digest = hashlib.sha256()
+    digest.update(canonical_json(entry).encode("utf-8"))
+    digest.update(prev_hash.encode("ascii"))
+    return digest.hexdigest()
+
+
+def _entry_line(entry: AuditEntry) -> str:
+    """The JSONL storage line for an already-hashed ``entry``: same
+    JSON-safe projection as ``canonical_json``, but keeping ``hash`` (this is
+    what actually lands on disk) and sorted/compact for a stable, diffable
+    file — not part of the hash rule itself."""
+    return json.dumps(_project(entry), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _entry_from_dict(d: dict[str, Any]) -> AuditEntry:
+    return AuditEntry(
+        seq=d["seq"],
+        prev_hash=d["prev_hash"],
+        hash=d["hash"],
+        ts=d["ts"],
+        as_of=date.fromisoformat(d["as_of"]),
+        actor=d["actor"],
+        action=AuditAction(d["action"]),
+        exception_id=d["exception_id"],
+        state_before=State(d["state_before"]) if d["state_before"] is not None else None,
+        state_after=State(d["state_after"]) if d["state_after"] is not None else None,
+        amount_paise=d["amount_paise"],
+        artifact_path=d["artifact_path"],
+    )
+
+
+def _resolve_artifact(artifacts_root: Path, artifact_path: str) -> tuple[Path | None, str | None]:
+    """Resolve ``artifact_path`` under ``artifacts_root``, confining it
+    there. SECURITY.md says claim packs are written under a fixed output
+    directory from ids validated against the report before any path is
+    formed — that is the argument for REJECTING a path that tries to point
+    anywhere else (absolute, or escaping via ``..``), not for accepting one
+    wherever it happens to point.
+
+    Returns ``(resolved, None)`` on a path that is safely confined to
+    ``artifacts_root`` (whether or not a file actually exists there yet —
+    callers check that separately), or ``(None, reason)`` naming why the
+    path itself is rejected outright, distinct from the file simply being
+    missing (an orphan pack).
+    """
+    raw = Path(artifact_path)
+    if raw.is_absolute():
+        return None, "artifact_path must be relative to artifacts_root, not absolute"
+    root = artifacts_root.resolve()
+    resolved = (artifacts_root / raw).resolve()
+    if resolved != root and root not in resolved.parents:
+        return None, "artifact_path escapes artifacts_root"
+    return resolved, None
 
 
 @dataclass(frozen=True, slots=True)
 class ChainVerification:
+    """Result of :func:`verify_chain`. Every field's meaning is documented
+    here because ``entries``/``first_bad_seq`` mean subtly different things
+    depending on which check failed (C2) — read this before comparing them
+    across call sites.
+
+    ok:
+        Whether the whole chain verified with no problem found.
+    entries:
+        On a clean result, or a hash/prev_hash-linkage/seq/orphan-pack
+        failure: the total number of entries successfully parsed from the
+        file (every one of them WAS parseable; the failure, if any, is about
+        their content or ordering, not their JSON). On an unparseable-line
+        failure: the count of entries successfully parsed *before* the line
+        that broke — never the physical line number, and blank lines (which
+        ``entries()`` silently skips) are never counted either way.
+    first_bad_seq:
+        ``None`` on a clean result. On a hash/prev_hash/seq/orphan-pack
+        failure: the failing entry's own ``seq`` (read from that entry,
+        since it parsed fine). On an unparseable-line failure: no ``seq``
+        could be read from that line, so this is the ``seq`` that WOULD have
+        been expected next (``entries + 1``) — a seq number, never a
+        physical line number, even though the two often coincide when there
+        are no blank lines before the break.
+    detail:
+        Human-readable reason. Always names the physical line number for a
+        parse failure (``"line N unparseable: ..."``) and the ``seq`` for a
+        chain-integrity failure, so the physical line is never lost even
+        when ``first_bad_seq`` above cannot carry it.
+    """
+
     ok: bool
     entries: int
     first_bad_seq: int | None
@@ -23,8 +378,21 @@ class ChainVerification:
 
 
 class AuditLog:
+    """Append-only JSONL log at ``path``. Every method re-reads ``path`` from
+    disk rather than caching — the file is the only state, which is what
+    makes reopening a log (a new ``AuditLog(path)`` instance) pick up exactly
+    where the last process left off.
+
+    ``append`` only ever refuses to continue past an *unreadable tail* — a
+    corrupt line elsewhere in the file does not stop it, since it never reads
+    beyond the tail to find its next ``seq``/``prev_hash``. See the module
+    docstring's paragraph on this for why that is correct rather than a gap:
+    ``verify_chain``/the gate (which scan every line) are what catch
+    middle-of-file corruption, and they stay red for as long as it is there.
+    """
+
     def __init__(self, path: Path) -> None:
-        self.path = path
+        self.path = Path(path)
 
     def append(
         self,
@@ -39,14 +407,226 @@ class AuditLog:
         amount_paise: Paise | None,
         artifact_path: str | None,
     ) -> AuditEntry:
-        raise NotImplementedError("lane E, issue #8")
+        head = self.head()
+        seq = head.seq + 1 if head is not None else 1
+        prev_hash = head.hash if head is not None else GENESIS_PREV_HASH
+        # hash="" placeholder: compute_hash strips the hash field regardless
+        # of what is passed here, so this is never read for hashing purposes.
+        draft = AuditEntry(
+            seq=seq,
+            prev_hash=prev_hash,
+            hash="",
+            ts=ts,
+            as_of=as_of,
+            actor=actor,
+            action=action,
+            exception_id=exception_id,
+            state_before=state_before,
+            state_after=state_after,
+            amount_paise=amount_paise,
+            artifact_path=artifact_path,
+        )
+        entry = dataclasses.replace(draft, hash=compute_hash(draft, prev_hash))
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Append-only: open in "a" mode only, never "w". Flush + fsync so a
+        # crash right after this call cannot silently lose the entry.
+        with self.path.open("a", encoding="utf-8") as fh:
+            fh.write(_entry_line(entry) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        return entry
 
     def entries(self) -> tuple[AuditEntry, ...]:
-        raise NotImplementedError("lane E, issue #8")
+        """Every entry, in file order. Raises :class:`AuditLogCorruptError`
+        naming the exact physical line the moment a line fails to parse,
+        rather than returning a partial result — a caller that wants the
+        good entries before the break point should catch the error and read
+        ``exc.parsed`` (``verify_chain`` does exactly this).
+
+        Opens and decodes in binary (``"rb"``, decoding each line explicitly)
+        rather than opening with ``encoding="utf-8"`` and iterating text
+        lines: the latter raises ``UnicodeDecodeError`` from inside the
+        ``for`` loop itself, outside any guard, so an interrupted write that
+        cuts a line off mid-multibyte-character (the canonical partial
+        write) used to crash past this method instead of being reported as
+        ordinary corruption (C1)."""
+        if not self.path.exists():
+            return ()
+        out: list[AuditEntry] = []
+        try:
+            raw_fh = self.path.open("rb")
+        except IsADirectoryError as exc:
+            raise AuditLogCorruptError(
+                1, f"{self.path} is a directory, not a file", parsed=0
+            ) from exc
+        with raw_fh as fh:
+            for line_no, raw_bytes in enumerate(fh, start=1):
+                line = raw_bytes.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(_entry_from_dict(json.loads(line.decode("utf-8"))))
+                except _PARSE_ERRORS as exc:
+                    raise AuditLogCorruptError(
+                        line_no, _describe_parse_error(exc), parsed=len(out)
+                    ) from exc
+        return tuple(out)
 
     def head(self) -> AuditEntry | None:
-        raise NotImplementedError("lane E, issue #8")
+        """The last entry, or ``None`` for an empty/absent log. Reads a
+        bounded window from the end of the file (see ``_read_tail_line_fast``
+        — starting small and doubling, capped at 64 KiB) to recover what is
+        typically a ~300-500 byte line, rather than parsing every earlier
+        line, so the cost is constant, independent of how many entries
+        already exist — NOT literally "read only the last line": it reads a
+        window sized to comfortably contain one, not a minimal exact-line
+        read. Falls back to the accurate, fully-parsed
+        ``entries()`` (which raises :class:`AuditLogCorruptError` naming the
+        exact line) whenever the fast tail read cannot confidently parse a
+        complete last line — that fallback only runs on the rare corrupt-log
+        path, never on a healthy append. Only a corrupt *tail* reaches this
+        fallback; ``append`` building on a ``head()`` that raises is why it
+        refuses to continue only past unreadable-tail corruption, never past
+        corruption earlier in the file (see the module and class
+        docstrings)."""
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return None
+        tail = _read_tail_line_fast(self.path)
+        if tail is not None:
+            try:
+                return _entry_from_dict(json.loads(tail))
+            except _PARSE_ERRORS:
+                pass  # fall through to the accurate full scan below
+        es = self.entries()
+        return es[-1] if es else None
+
+    def next_seq(self) -> int:
+        """The ``seq`` the next :meth:`append` call will assign — 1 for an
+        empty log. ``types.ClaimPack.audit_seq`` is a required field and D8
+        says the pack is written to disk before its audit entry is appended,
+        so the caller needs this seq in advance to put it in the pack.
+
+        Meaningful only under the single-writer assumption in the module
+        docstring: it reads the current head the same way ``append`` does,
+        so a second concurrent writer could observe the same value and both
+        append the same seq — caught by ``verify_chain`` as a duplicate,
+        not prevented here.
+        """
+        head = self.head()
+        return head.seq + 1 if head is not None else 1
 
 
-def verify_chain(path: Path) -> ChainVerification:
-    raise NotImplementedError("lane E, issue #8")
+def verify_chain(path: Path, artifacts_root: Path | None = None) -> ChainVerification:
+    """Recompute every hash in ``path`` and check ``prev_hash``/``seq``
+    linkage; never compares bytes to a stored or golden chain (see module
+    docstring). Reports the first ``seq`` at which something is wrong and
+    why. A missing file is a trivially-ok, zero-entry chain — there is
+    nothing to have gone wrong yet.
+
+    When ``artifacts_root`` is given, every entry carrying an
+    ``artifact_path`` must resolve to a file that exists under it, so an
+    audit entry claiming a pack whose file was never written (or was later
+    deleted) is caught here rather than only by a human reading the pack
+    (D8 orphan-pack detection).
+    """
+    path = Path(path)
+    if not path.exists():
+        return ChainVerification(ok=True, entries=0, first_bad_seq=None, detail="no audit log yet")
+
+    try:
+        entries = AuditLog(path).entries()
+    except AuditLogCorruptError as exc:
+        # A line that cannot even be parsed is reported like any other
+        # verification failure — never a raised exception (see module
+        # docstring). entries/first_bad_seq count parsed entries and the seq
+        # that would have come next, NOT the physical line number (C2): a
+        # blank line before the break is skipped by entries() and must not
+        # inflate either count. The physical line number is still named in
+        # detail, since that is what a human needs to go look at the file.
+        return ChainVerification(
+            ok=False,
+            entries=exc.parsed,
+            first_bad_seq=exc.parsed + 1,
+            detail=f"line {exc.line_no} unparseable: {exc.reason}",
+        )
+
+    prev_hash = GENESIS_PREV_HASH
+    expected_seq = 1
+    for entry in entries:
+        if entry.seq != expected_seq:
+            return ChainVerification(
+                ok=False,
+                entries=len(entries),
+                first_bad_seq=entry.seq,
+                detail=f"seq {entry.seq} out of order: expected seq {expected_seq} next",
+            )
+        if entry.prev_hash != prev_hash:
+            return ChainVerification(
+                ok=False,
+                entries=len(entries),
+                first_bad_seq=entry.seq,
+                detail=(
+                    f"seq {entry.seq}: prev_hash {entry.prev_hash!r} does not match "
+                    f"the preceding entry's hash {prev_hash!r}"
+                ),
+            )
+        recomputed = compute_hash(entry, entry.prev_hash)
+        if recomputed != entry.hash:
+            return ChainVerification(
+                ok=False,
+                entries=len(entries),
+                first_bad_seq=entry.seq,
+                detail=(
+                    f"seq {entry.seq}: hash mismatch, stored {entry.hash!r} "
+                    f"but recomputed {recomputed!r} — entry was edited without "
+                    "being re-chained"
+                ),
+            )
+        if artifacts_root is not None and entry.artifact_path is not None:
+            resolved, error = _resolve_artifact(Path(artifacts_root), entry.artifact_path)
+            if error is not None:
+                return ChainVerification(
+                    ok=False,
+                    entries=len(entries),
+                    first_bad_seq=entry.seq,
+                    detail=f"seq {entry.seq}: {error} ({entry.artifact_path!r})",
+                )
+            assert resolved is not None  # error is None iff resolved is set
+            if not resolved.is_file():
+                return ChainVerification(
+                    ok=False,
+                    entries=len(entries),
+                    first_bad_seq=entry.seq,
+                    detail=(
+                        f"seq {entry.seq}: artifact_path {entry.artifact_path!r} is "
+                        f"not a file under {artifacts_root} (orphan pack)"
+                    ),
+                )
+        prev_hash = entry.hash
+        expected_seq += 1
+    detail = f"{len(entries)} entries verified"
+    if artifacts_root is None:
+        # A passing result must never claim a check it did not run: without
+        # artifacts_root, no entry's artifact_path was checked against disk
+        # at all, so orphan packs would sail through silently if this said
+        # only "N entries verified" (which reads as everything was checked).
+        detail += "; artifact paths not checked"
+    return ChainVerification(ok=True, entries=len(entries), first_bad_seq=None, detail=detail)
+
+
+def audit_chain_gate(path: Path, artifacts_root: Path) -> GateResult:
+    """``GateResult`` wrapper around ``verify_chain`` for registration in
+    ``gates.HARD_GATES`` (the integrator binds ``path``/``artifacts_root``
+    at merge time, since ``Gate`` callables take no arguments). ``artifacts_root``
+    is required (unlike ``verify_chain``'s optional one): a gate registered
+    without it would report "N entries verified" forever while never
+    catching an orphan pack, since the wording alone does not tell a reader
+    which check ran. An absent log file passes: nothing has been audited
+    yet, so there is nothing to fail on.
+    """
+    path = Path(path)
+    if not path.exists():
+        return GateResult(name="audit-chain", ok=True, detail="no audit log yet")
+    result = verify_chain(path, artifacts_root)
+    return GateResult(name="audit-chain", ok=result.ok, detail=result.detail)

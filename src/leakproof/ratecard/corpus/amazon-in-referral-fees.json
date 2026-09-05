@@ -1,0 +1,110 @@
+{
+  "source": {
+    "label": "Amazon.in Fees and Pricing, \"Referral Fees by Category\" table (schedule in force from 16 March 2026)",
+    "url": "https://sell.amazon.in/fees-and-pricing#referral-fee",
+    "as_of": "2026-09-04",
+    "verified": true
+  },
+  "note": "Referral fee is Amazon's commission; the settlement file posts it as (ItemFees, Commission) -> LineKind.COMMISSION. Each declared category identifier is pinned to exactly one Amazon.in fee-category node (contract.CATEGORY_NODES, RS3 section 1); the node name is on every rule. Bands are read literally from the page: \"0.00% for item price <= 300\" becomes an inclusive slab of [null, 30000] paise. The bound is an ITEM price, so the band key is one unit's price (row principal / quantity), which is what slab_basis says on every rule below.",
+  "rules": [
+    {
+      "rule_id": "amz-in-ref-2026-03-16-electronics-accessories-b1",
+      "kind": "commission",
+      "category_id": "electronics-accessories",
+      "category_node": "Accessories - Electronics, PC and Wireless",
+      "percent_bp": 0,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": null,
+      "slab_max_paise": 30000,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "amz-in-ref-2026-03-16-electronics-accessories-b2",
+      "kind": "commission",
+      "category_id": "electronics-accessories",
+      "category_node": "Accessories - Electronics, PC and Wireless",
+      "percent_bp": 500,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": 30001,
+      "slab_max_paise": 100000,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "amz-in-ref-2026-03-16-electronics-accessories-b3",
+      "kind": "commission",
+      "category_id": "electronics-accessories",
+      "category_node": "Accessories - Electronics, PC and Wireless",
+      "percent_bp": 1700,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": 100001,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "amz-in-ref-2026-03-16-home-kitchen-b1",
+      "kind": "commission",
+      "category_id": "home-kitchen",
+      "category_node": "Kitchen - Cookware, Tableware & Dinnerware",
+      "percent_bp": 0,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": null,
+      "slab_max_paise": 100000,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true,
+      "note": "The referral table lists this node as \"Cookware, Tableware & Dinnerware\" under the group \"Kitchen, Large & Small Appliances\"; the closing-fee group lists spell it \"Kitchen - Cookware, Tableware & Dinnerware\", which is the spelling contract.CATEGORY_NODES pins."
+    },
+    {
+      "rule_id": "amz-in-ref-2026-03-16-home-kitchen-b2",
+      "kind": "commission",
+      "category_id": "home-kitchen",
+      "category_node": "Kitchen - Cookware, Tableware & Dinnerware",
+      "percent_bp": 1250,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": 100001,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "amz-in-ref-2026-03-16-apparel-b1",
+      "kind": "commission",
+      "category_id": "apparel",
+      "category_node": "Apparel - Shirts",
+      "percent_bp": 0,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": null,
+      "slab_max_paise": 100000,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    },
+    {
+      "rule_id": "amz-in-ref-2026-03-16-apparel-b2",
+      "kind": "commission",
+      "category_id": "apparel",
+      "category_node": "Apparel - Shirts",
+      "percent_bp": 2100,
+      "fixed_paise": null,
+      "slab_basis": "unit-item-price",
+      "slab_min_paise": 100001,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    }
+  ]
+}
