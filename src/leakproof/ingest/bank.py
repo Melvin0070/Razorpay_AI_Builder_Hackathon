@@ -46,8 +46,9 @@ def _is_blank_row(row: list[str]) -> bool:
 
 
 def _read_physical_rows(text: str) -> list[tuple[int, list[str]]]:
-    """``(physical_start_line, fields)`` per CSV row -- see ``orders.py``, S9."""
-    reader = csv.reader(io.StringIO(text))
+    """``(physical_start_line, fields)`` per CSV row -- see ``orders.py``, S9
+    and G1 for why ``newline=""`` on the ``StringIO`` is load-bearing."""
+    reader = csv.reader(io.StringIO(text, newline=""))
     rows: list[tuple[int, list[str]]] = []
     while True:
         start = reader.line_num + 1

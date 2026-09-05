@@ -81,8 +81,19 @@ def _is_blank_row(row: list[str]) -> bool:
 
 
 def _read_physical_rows(text: str) -> list[tuple[int, list[str]]]:
-    """``(physical_start_line, fields)`` per CSV row -- see module docstring, S9."""
-    reader = csv.reader(io.StringIO(text))
+    """``(physical_start_line, fields)`` per CSV row -- see module docstring, S9.
+
+    ``newline=""`` on the ``StringIO`` (the same discipline the csv module
+    docs prescribe for ``open()``) is load-bearing, not cosmetic: without it
+    a bare ``\\r`` -- an Excel-for-Mac export, or a stray ``\\r`` inside a
+    bank narration -- is not recognised as a line ending at all, and
+    ``csv.reader`` raises ``_csv.Error: new-line character seen in unquoted
+    field`` out of the whole file with no line_id (G1). ``newline=""`` makes
+    ``\\r``, ``\\r\\n`` and ``\\n`` all count as one physical line ending
+    without translating any of them inside a quoted field, so S9's
+    line_num-based physical numbering is unaffected either way.
+    """
+    reader = csv.reader(io.StringIO(text, newline=""))
     rows: list[tuple[int, list[str]]] = []
     while True:
         start = reader.line_num + 1

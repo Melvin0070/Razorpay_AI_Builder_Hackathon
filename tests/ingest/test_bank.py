@@ -225,3 +225,37 @@ def test_embedded_newline_in_quoted_narration_keeps_next_row_at_its_physical_lin
     assert first.line_id == f"{path.name}:2"
     # The quoted field spans physical lines 2-3, so the second credit is on line 4.
     assert second.line_id == f"{path.name}:4"
+
+
+# --------------------------------------------------------------------------- #
+# G1: a CR-only or CRLF file must parse like any other -- see test_orders.py
+# for the regression this guards against.
+# --------------------------------------------------------------------------- #
+
+
+def test_cr_only_line_endings_parse_like_lf(tmp_path):
+    content = ("\r".join([HEADER_ROW, _row(utr="UTR1"), _row(utr="UTR2")]) + "\r").encode("utf-8")
+    path = tmp_path / "cr_only.csv"
+    path.write_bytes(content)
+
+    result = parse_bank(path)
+
+    assert result.quarantined == ()
+    assert len(result.credits) == 2
+    assert result.credits[0].line_id == f"{path.name}:2"
+    assert result.credits[1].line_id == f"{path.name}:3"
+
+
+def test_crlf_line_endings_parse_like_lf(tmp_path):
+    content = ("\r\n".join([HEADER_ROW, _row(utr="UTR1"), _row(utr="UTR2")]) + "\r\n").encode(
+        "utf-8"
+    )
+    path = tmp_path / "crlf.csv"
+    path.write_bytes(content)
+
+    result = parse_bank(path)
+
+    assert result.quarantined == ()
+    assert len(result.credits) == 2
+    assert result.credits[0].line_id == f"{path.name}:2"
+    assert result.credits[1].line_id == f"{path.name}:3"

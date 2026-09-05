@@ -303,3 +303,42 @@ def test_blank_lines_are_skipped_and_physical_numbering_is_preserved(tmp_path):
     assert len(result.orders) == 2
     assert result.orders[0].source_line_id == f"{path.name}:2"
     assert result.orders[1].source_line_id == f"{path.name}:4"
+
+
+# --------------------------------------------------------------------------- #
+# G1: a CR-only or CRLF file must parse like any other -- the salvage commit
+# that swapped ``read_text`` for ``read_bytes().decode(...)`` dropped
+# universal-newline translation, so a bare ``\r`` reached ``csv.reader``
+# unrecognised as a line ending and the whole file raised ``_csv.Error``
+# instead of quarantining a row.
+# --------------------------------------------------------------------------- #
+
+
+def test_cr_only_line_endings_parse_like_lf(tmp_path):
+    content = (
+        "\r".join([HEADER_ROW, _row(order_id="ORD-1"), _row(order_id="ORD-2")]) + "\r"
+    ).encode("utf-8")
+    path = tmp_path / "cr_only.csv"
+    path.write_bytes(content)
+
+    result = parse_orders(path)
+
+    assert result.quarantined == ()
+    assert len(result.orders) == 2
+    assert result.orders[0].source_line_id == f"{path.name}:2"
+    assert result.orders[1].source_line_id == f"{path.name}:3"
+
+
+def test_crlf_line_endings_parse_like_lf(tmp_path):
+    content = (
+        "\r\n".join([HEADER_ROW, _row(order_id="ORD-1"), _row(order_id="ORD-2")]) + "\r\n"
+    ).encode("utf-8")
+    path = tmp_path / "crlf.csv"
+    path.write_bytes(content)
+
+    result = parse_orders(path)
+
+    assert result.quarantined == ()
+    assert len(result.orders) == 2
+    assert result.orders[0].source_line_id == f"{path.name}:2"
+    assert result.orders[1].source_line_id == f"{path.name}:3"
