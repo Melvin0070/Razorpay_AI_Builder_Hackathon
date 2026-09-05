@@ -137,6 +137,7 @@ class TestServedEndpoints:
     @pytest.fixture
     def client(self):
         pytest.importorskip("fastapi")
+        pytest.importorskip("httpx")
         from fastapi.testclient import TestClient
 
         app = serve.create_app(FIXTURE_PATH)
@@ -147,11 +148,17 @@ class TestServedEndpoints:
         assert resp.status_code == 200
         assert "<button" in resp.text
 
-    def test_gate_action_returns_501_with_lane_and_issue(self, client):
-        finding_id = REPORT.queue[1].finding.finding_id  # not the pre-approved row
-        resp = client.post(f"/gate/approve/{finding_id}")
-        assert resp.status_code == 501
-        assert "lane O" in resp.json()["detail"]
+    def test_gate_action_approve_succeeds(self, client):
+        from leakproof.contract import State
+
+        claim_ready_id = next(
+            item.finding.finding_id
+            for item in REPORT.queue
+            if item.state.state is State.CLAIM_READY
+        )
+        resp = client.post(f"/gate/approve/{claim_ready_id}")
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True}
 
     def test_gate_action_unknown_finding_is_404(self, client):
         resp = client.post("/gate/approve/does-not-exist")

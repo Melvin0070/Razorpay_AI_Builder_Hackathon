@@ -1,0 +1,11 @@
+{
+  "finding_id": "406-9170267-1393608|5|-",
+  "template_text": "Customer return was processed without the corresponding fee reversal per marketplace policy. Return inspection is logged; requesting reimbursement of {{amt:settlement_2026-08-14.txt:245}}.",
+  "rendered_text": "Customer return was processed without the corresponding fee reversal per marketplace policy. Return inspection is logged; requesting reimbursement of \u20b9437.38.",
+  "magnitude": "minor",
+  "model": "claude-sonnet-5",
+  "model_version": "2026-06-01",
+  "placeholders": [
+    "settlement_2026-08-14.txt:245"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "finding_id": "408-9606110-9190751|1|settlement_2026-08-07.txt:189",
+  "template_text": "Commission was charged at a rate exceeding the published Amazon India schedule for category electronics-accessories. Recomputation is attached; requesting an adjustment of {{amt:settlement_2026-08-07.txt:189}} to the referral fee.",
+  "rendered_text": "Commission was charged at a rate exceeding the published Amazon India schedule for category electronics-accessories. Recomputation is attached; requesting an adjustment of \u20b9399.92 to the referral fee.",
+  "magnitude": "minor",
+  "model": "claude-sonnet-5",
+  "model_version": "2026-06-01",
+  "placeholders": [
+    "settlement_2026-08-07.txt:189"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "finding_id": "404-9044537-2428428|6|-",
+  "template_text": "Order was confirmed delivered to customer but settlement payout was omitted across consecutive cycles. Carrier delivery confirmation is attached; requesting disbursement of {{amt:orders.csv:4}}.",
+  "rendered_text": "Order was confirmed delivered to customer but settlement payout was omitted across consecutive cycles. Carrier delivery confirmation is attached; requesting disbursement of \u20b9576.45.",
+  "magnitude": "moderate",
+  "model": "claude-sonnet-5",
+  "model_version": "2026-06-01",
+  "placeholders": [
+    "orders.csv:4"
+  ]
+}

@@ -39,15 +39,18 @@ This document is the exact second-by-second script and visual choreography for y
 
 #### MINUTE 2: The Live Execution & Honest Partition (1:00 – 2:00)
 **On Screen:**
-- *1:00 – 1:15*: Clean Terminal window. Run command:
+- *1:00 – 1:15*: Clean Terminal window. Run commands:
   ```bash
   make demo
+  make serve
   ```
-  Highlight the output: `wrote out/demo.html` in **<150ms** with zero network calls and zero API keys.
-- *1:15 – 2:00*: Switch browser to `out/demo.html`. Full-screen dashboard showing the top summary bar and metrics strip. Point your cursor to the Match Rate chip and the 4 Rupee cards.
+  Highlight the output: `make demo` emits `out/demo.html` in **<150ms** as a self-contained, keyless compliance archive. `make serve` starts the live interactive controller on `http://127.0.0.1:8000`.
+- *1:15 – 2:00*: Open browser at **`http://127.0.0.1:8000`**. Full-screen dashboard showing the top summary bar and metrics strip. Point your cursor to the Match Rate chip and the 4 Rupee cards.
 
 **Spoken Script:**
-> *"Let's see it live. In our terminal, I run `make demo`. In under 150 milliseconds, with zero network calls and no API key required, LeakProof ingests 150 orders across 4 weekly settlement cycles, folds multi-cycle settlement lines, executes our detection suite, assesses filing evidence, and renders this self-contained dashboard.*
+> *"Let's see it live. In our terminal, I run `make demo`, which emits an offline compliance archive in under 150 milliseconds. Then I run `make serve` to start our live finance controller at `http://127.0.0.1:8000`.*
+>
+> *With zero external network calls and no API key required, LeakProof ingests 150 orders across 4 weekly settlement cycles, folds multi-cycle settlement lines, executes our detection suite, assesses filing evidence, and renders this live interactive controller.*
 >
 > *Notice our headline reconciliation rates: we report two distinct match rates out loud.*
 > *Our **Strict Match Rate is 96.7%**—145 out of 150 orders matched cleanly.*
@@ -64,30 +67,37 @@ This document is the exact second-by-second script and visual choreography for y
 
 #### MINUTE 3: End-to-End Claim Drill-Down (2:00 – 3:00)
 **On Screen:**
-- *2:00 – 2:25*: Scroll to the Queue table in `demo.html`. Click on Order `408-9606110-9190751` (Commission Overcharge, ₹399.92). Expand the row to reveal:
-  1. The cited settlement row (`settlement_2026-08-21.txt:1204`).
-  2. The Recomputation table (Order Value ₹9,998 → Rate Card 8.0% + GST vs Billed 12%).
-  3. The LLM-drafted dispute prose.
-- *2:25 – 2:45*: Hover over the drafted letter. Point out the dynamic deadline countdown badge: *"Filing Window: 42 Days Remaining"*.
-- *2:45 – 3:00*: Click the green **"Approve & Export Claim Pack"** button. Show terminal or modal with the written claim pack JSON on disk.
+- *2:00 – 2:25*: On `http://127.0.0.1:8000`, click on **Order `408-9606110-9190751`** (Commission Overcharge, ₹399.92, `CLAIM-READY`). The right-hand detail pane displays:
+  1. The cited settlement row (`settlement_2026-08-07.txt:189`).
+  2. The Recomputation diff table: `expected → ₹849.83`, `difference → ₹399.92`.
+  3. The category and policy basis: `amz-in-ref-2026-03-16-electronics-accessories-b3`.
+  4. The LLM-drafted dispute prose: *"Commission was charged at a rate exceeding the published Amazon India schedule for category electronics-accessories. Recomputation is attached; requesting an adjustment of ₹399.92 to the referral fee."*
+- *2:25 – 2:45*: Point your cursor to the live green **`APPROVE & QUEUE`** button. Read the consequence notice: *"Writes a claim pack and one audit entry. Nothing is filed. Approving twice is a no-op."*
+- *2:45 – 3:00*: Click **`APPROVE & QUEUE`**!
+  The button instantly updates to **"Done."** Switch briefly to terminal or run:
+  ```bash
+  ls out/claims && tail -n 1 out/audit.jsonl
+  ```
+  Show the written Claim Pack JSON and the SHA-256 cryptographic sequence #1 entry.
 
 **Spoken Script:**
-> *"Let's drill into a live claim: Order 408, a ₹399.92 commission overcharge on an electronics accessory.*
+> *"Let's drill into a live claim: Order 408, a ₹399.92 commission overcharge on an electronics accessory.
 >
-> *Here you see our core thesis in action: **deterministic money, probabilistic language**.*
+> Here you see our core thesis in action: **deterministic money, probabilistic language**.
 >
-> *On the left, the math is 100% deterministic. LeakProof loaded the dated Amazon Rate Card, verified the category fee bracket, and computed the exact discrepancy down to the paisa: ₹399.92. The LLM was never allowed to touch this number.*
+> On the left, the math is 100% deterministic. LeakProof loaded the dated Amazon Rate Card, verified the category fee bracket, and computed the exact discrepancy down to the paisa: ₹399.92. The LLM was never allowed to touch this number.
 >
-> *On the right, the LLM generated the formal dispute narrative. Under our D2 architectural invariant, the prompt never received a rupee figure; the LLM outputted structured prose citing Amazon Fee Policy Section 3.2 with dynamic line tokens, and our engine resolved the verified amount into the template.*
+> On the right, the LLM generated the formal dispute narrative. Under our D2 architectural invariant, the prompt never received a rupee figure; the LLM outputted structured prose citing marketplace policies with dynamic line tokens like `{{amt:settlement_...}}`, and our engine deterministically resolved the verified amount into the template.
 >
-> *With one click on 'Approve', LeakProof generates a complete, bank-grade Claim Pack containing the claim letter, the cited settlement rows CSV, and the mathematical recomputation CSV—and commits it directly to disk."*
+> Now, watch the human gate. When I click this green **APPROVE & QUEUE** button, the live FastAPI backend executes: it writes a complete, self-contained Claim Pack JSON into `out/claims/` and appends an immutable entry to our SHA-256 audit log. Approving twice is strictly idempotent—no duplicate files, no duplicate audit entries."*
 
 ---
 
 #### MINUTE 4: The "Honesty Beat" & Held-Out Test Set (3:00 – 4:00)
 **On Screen:**
-- *3:00 – 3:30*: In `demo.html`, filter the queue by `BLOCKED`. Click Order `406-8033657-7010859` (₹272.79 Refund without Fee Reversal). Show the red badge: *"BLOCKED: Seller GST Tax Invoice Required"*. Show that the Approve button is disabled and replaced with *"Upload Tax Invoice to Unlock"*.
-- *3:30 – 3:45*: Click Order `405-2873519-1778984` in `NOT-CLAIMABLE` (₹629.79). Show reason: *"Exclusion: Seller-Initiated Refund"*.
+- *3:00 – 3:30*: On `http://127.0.0.1:8000`, click the **`BLOCKED`** filter chip. Select Order `406-8033657-7010859` (₹272.79 Refund without Fee Reversal).
+  Show that instead of a normal approve button, it renders **`DRAFT WITHOUT EVIDENCE`** and **`REJECT`**, with the warning: *"Drafts without: Tax invoice for the returned item. Pack marked OVERRIDDEN. Never enters ₹ claim-ready."*
+- *3:30 – 3:45*: Click the **`NOT-CLAIMABLE`** chip. Select Order `405-2873519-1778984` (₹629.79). Show the button **`DRAFT DESPITE EXCLUSION`** and reason: *"Exclusion: Seller-Initiated Refund"*.
 - *3:45 – 4:00*: Switch briefly to Terminal and run:
   ```bash
   make metrics

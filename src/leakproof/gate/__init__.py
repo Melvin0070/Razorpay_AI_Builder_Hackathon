@@ -153,7 +153,7 @@ def approve(
             actor=actor,
             ts=ts,
             as_of=as_of,
-            artifact=pack.path,
+            artifact=Path(pack.path).name,
         )
     return pack
 
@@ -181,7 +181,7 @@ def override(
             actor=actor,
             ts=ts,
             as_of=as_of,
-            artifact=pack.path,
+            artifact=Path(pack.path).name,
         )
     return pack
 
