@@ -19,6 +19,7 @@ from leakproof.ingest.reasons import (
     column_count,
     missing_order_id_on_order_row,
     quantity_not_numeric,
+    quantity_not_positive,
     unknown_header_layout,
 )
 from leakproof.ingest.settlement import (
@@ -279,6 +280,36 @@ def test_quantity_not_numeric_on_transaction_row(tmp_path):
 
     assert result.lines == ()
     assert result.quarantined == (_q(path.name, 3, quantity_not_numeric("one")),)
+
+
+# --------------------------------------------------------------------------- #
+# G9: quantity-purchased must reject 0 and negative values, matching the
+# orders CSV's own rule (S12) for the same concept.
+# --------------------------------------------------------------------------- #
+
+
+def test_quantity_zero_is_not_positive(tmp_path):
+    path = _write(
+        tmp_path,
+        "qty0.txt",
+        [HEADER_ROW, _summary_row(), _order_row(**{"quantity-purchased": "0"})],
+    )
+    result = parse_settlement_file(path)
+
+    assert result.lines == ()
+    assert result.quarantined == (_q(path.name, 3, quantity_not_positive("0")),)
+
+
+def test_quantity_negative_is_not_positive(tmp_path):
+    path = _write(
+        tmp_path,
+        "qtyneg.txt",
+        [HEADER_ROW, _summary_row(), _order_row(**{"quantity-purchased": "-5"})],
+    )
+    result = parse_settlement_file(path)
+
+    assert result.lines == ()
+    assert result.quarantined == (_q(path.name, 3, quantity_not_positive("-5")),)
 
 
 # --------------------------------------------------------------------------- #

@@ -36,6 +36,7 @@ from leakproof.ingest.reasons import (
     column_count,
     missing_order_id_on_order_row,
     quantity_not_numeric,
+    quantity_not_positive,
     unknown_header_layout,
 )
 from leakproof.types import QuarantinedRow, SettlementFileParse, SettlementHeader, SettlementLine
@@ -341,6 +342,13 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
             if quantity is None:
                 quarantined.append(
                     QuarantinedRow(line_id=line_id, reason=quantity_not_numeric(quantity_raw))
+                )
+                continue
+            if quantity <= 0:
+                # G9: match orders.py -- a quantity that parses but is <= 0
+                # is still not a real quantity.
+                quarantined.append(
+                    QuarantinedRow(line_id=line_id, reason=quantity_not_positive(quantity_raw))
                 )
                 continue
 
