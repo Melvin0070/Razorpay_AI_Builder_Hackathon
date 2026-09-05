@@ -10,7 +10,7 @@ from datetime import date
 import pytest
 
 from leakproof.contract import Disposition, LineKind
-from leakproof.ratecard import config_error_gate, load_rate_card, sweep
+from leakproof.ratecard import RateCardCorpus, config_error_gate, load_rate_card, sweep
 from leakproof.ratecard.gate import GATE_NAME
 from leakproof.scenarios import SCENARIOS, Scenario, ScenarioKind
 from leakproof.types import LookupMiss
@@ -47,6 +47,28 @@ def test_the_sweep_probes_both_sides_of_every_validity_edge(card):
     probes = set(_probe_dates(card))
     for edge in (date(2026, 9, 6), date(2026, 9, 7)):
         assert {edge, edge + date.resolution} <= probes, edge
+
+
+def test_the_sweep_probes_the_no_category_call_site(card):
+    """The orphan line (D5, D7) has a kind and no category, and the sweep is
+    the only place that says so before lane J finds out at runtime."""
+    seen: list[str | None] = []
+
+    class Recording(RateCardCorpus):
+        def lookup(self, kind, category_id, as_of, band_key_paise=None):
+            seen.append(category_id)
+            return super().lookup(kind, category_id, as_of, band_key_paise)
+
+    sweep(
+        Recording(
+            rules=card.rules,
+            declaration=card.declaration,
+            source_path=card.source_path,
+            slab_bases=card.slab_bases,
+        )
+    )
+    assert None in seen
+    assert set(card.coverage().categories) <= set(seen)
 
 
 def test_a_deliberate_slab_gap_is_a_config_error_from_lookup(broken_card):

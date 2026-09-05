@@ -300,6 +300,15 @@ class RateCardCorpus:
         return None
 
     @property
+    def category_scoped_kinds(self) -> tuple[LineKind, ...]:
+        """Kinds the corpus prices per category, so a lookup with no category
+        cannot resolve one. Derived: a kind qualifies when it has rules and
+        every one of them names a category."""
+        scoped = {r.kind for r in self.rules if r.category_id is not None}
+        wide = {r.kind for r in self.rules if r.category_id is None}
+        return tuple(k for k in LineKind if k in scoped - wide)
+
+    @property
     def audited_kinds(self) -> tuple[LineKind, ...]:
         return self.declaration.audited_kinds
 
@@ -335,6 +344,21 @@ class RateCardCorpus:
                 detail=(
                     f"as_of {as_of.isoformat()} is outside the declared coverage window "
                     f"[{d.valid_from.isoformat()}, {end}]"
+                ),
+            )
+        # A settlement line whose order is absent from the seller's export (the
+        # orphan case D5 and D7 model) carries a COMMISSION deduction and no
+        # category at all, and the caller passes None. That is a limitation of
+        # the inputs, not a corpus bug: UNCOVERED, never CONFIG_ERROR.
+        if category_id is None and kind in self.category_scoped_kinds:
+            return LookupMiss(
+                disposition=Disposition.UNCOVERED,
+                kind=kind,
+                category_id=None,
+                as_of=as_of,
+                detail=(
+                    f"{kind.value} is priced per category and no category is known for "
+                    f"this line; the corpus prices it for {', '.join(d.categories)}"
                 ),
             )
         return None

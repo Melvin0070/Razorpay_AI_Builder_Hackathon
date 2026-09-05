@@ -99,6 +99,31 @@ def test_marketplace_wide_rules_also_resolve_with_no_category(card):
     assert isinstance(rule, RateRule)
 
 
+@pytest.mark.parametrize("kind", [LineKind.COMMISSION, LineKind.FIXED_CLOSING_FEE])
+def test_a_category_scoped_kind_with_no_category_is_uncovered(card, kind):
+    """None means "marketplace-wide" in the corpus and "I do not know the
+    category" at the call site. A settlement line whose order is absent from
+    the seller's export (D5, D7) has a commission deduction and no category, so
+    a lane that passes None must get a limitation, not the disposition D17
+    reserves for a corpus bug."""
+    assert kind in card.category_scoped_kinds
+    result = card.lookup(kind, None, INSIDE, 150_000)
+    assert isinstance(result, LookupMiss)
+    assert result.disposition is Disposition.UNCOVERED
+    assert kind.value in result.detail
+
+
+def test_no_declared_kind_is_a_config_error_with_no_category(card):
+    """Otherwise DispositionCounts.config_error goes non-zero on a clean corpus
+    while make verify stays green, which is the confusion D17 exists to end."""
+    for kind in (*card.audited_kinds, *card.acknowledged_kinds):
+        result = card.lookup(kind, None, INSIDE, 150_000)
+        config_error = (
+            isinstance(result, LookupMiss) and result.disposition is Disposition.CONFIG_ERROR
+        )
+        assert not config_error, kind
+
+
 def test_an_acknowledged_kind_returns_a_rule_that_is_not_audited(card):
     for kind in card.coverage().acknowledged_kinds:
         rule = card.lookup(kind, APPAREL, INSIDE)

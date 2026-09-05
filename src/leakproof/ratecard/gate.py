@@ -65,8 +65,12 @@ def sweep(card: RateCardCorpus) -> tuple[LookupMiss, ...]:
     """
     misses: list[LookupMiss] = []
     kinds = (*card.audited_kinds, *card.acknowledged_kinds)
+    # None is a real call site, not a hole in the parametrisation: a settlement
+    # line whose order is missing from the seller's export has a kind and no
+    # category, and every kind must answer that with a rule or an UNCOVERED.
+    categories: tuple[str | None, ...] = (*card.coverage().categories, None)
     for as_of in _probe_dates(card):
-        for category_id in card.coverage().categories:
+        for category_id in categories:
             for kind in kinds:
                 for principal in _probe_band_keys(card, kind, category_id, as_of):
                     result = card.lookup(kind, category_id, as_of, principal)
