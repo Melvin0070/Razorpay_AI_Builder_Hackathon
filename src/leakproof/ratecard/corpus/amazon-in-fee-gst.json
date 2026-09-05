@@ -1,0 +1,24 @@
+{
+  "source": {
+    "label": "Amazon.in Fees and Pricing, NOTE 1: \"All the fee types listed above are displayed excluding Goods and Services Tax (GST). We will apply 18% (eighteen percent) GST to all fees displayed above.\"",
+    "url": "https://sell.amazon.in/fees-and-pricing#other-fees",
+    "as_of": "2026-09-04",
+    "verified": true
+  },
+  "note": "Marketplace-wide (category_id null): GST rides on every fee, not on a category. The settlement file posts it as (ItemFees, TaxOnFees) -> LineKind.FEE_TAX. The page states the rate as current and gives it no effective date, so the rule starts at the corpus coverage floor rather than at an invented one.",
+  "rules": [
+    {
+      "rule_id": "amz-in-fee-gst-2026-03-16",
+      "kind": "fee-tax",
+      "category_id": null,
+      "category_node": null,
+      "percent_bp": 1800,
+      "fixed_paise": null,
+      "slab_min_paise": null,
+      "slab_max_paise": null,
+      "valid_from": "2026-03-16",
+      "valid_to": null,
+      "audited": true
+    }
+  ]
+}
