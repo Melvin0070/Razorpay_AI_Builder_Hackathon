@@ -10,6 +10,7 @@ import pytest
 from leakproof import contract as c
 from leakproof.labels import LABELS_PATH, LabelsError, load_labels
 from leakproof.labels.ladder import (
+    PROFESSIONAL_REVIEW_STEP,
     STEP_BLOCKER_KIND,
     STEP_NOT_CLAIMABLE_REASON,
     STEP_STATE,
@@ -194,6 +195,33 @@ def test_load_labels_rejects_step_0_on_a_class_that_files_something(tmp_path, ra
     )
     with pytest.raises(LabelsError, match="step 0 belongs to"):
         load_labels(_write(raw, entries, tmp_path))
+
+
+def test_load_labels_rejects_professional_review_off_step_0b(tmp_path, raw):
+    # Gap F6: STEP_BLOCKER_KIND fixes a kind for steps 0b and 3 only, so step 5
+    # was free to claim a kind the design gives to step 0b alone, and
+    # _check_class_table only forbade it by the mechanism route.
+    entries = _replace(
+        raw, Scenario.C5_INVOICE_PENDING, expected_blocker_kind="professional-review"
+    )
+    with pytest.raises(LadderError, match="belongs to step 0b alone"):
+        load_labels(_write(raw, entries, tmp_path))
+
+
+def test_professional_review_is_rejected_on_every_step_but_0b():
+    blocking = [s for s in STEP_STATE if STEP_STATE[s] is c.State.BLOCKED]
+    assert blocking == [PROFESSIONAL_REVIEW_STEP, "3", "5"]
+    for step in blocking:
+        if step == PROFESSIONAL_REVIEW_STEP:
+            continue
+        with pytest.raises(LadderError):
+            check_combination(
+                step=step,
+                state=c.State.BLOCKED,
+                blocker_kind=c.BlockerKind.PROFESSIONAL_REVIEW,
+                not_claimable_reason=None,
+                where="synthetic",
+            )
 
 
 def test_load_labels_names_the_entry_when_a_field_is_missing(tmp_path, raw):

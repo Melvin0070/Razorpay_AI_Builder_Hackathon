@@ -51,6 +51,13 @@ STEP_BLOCKER_KIND: Final[dict[str, BlockerKind | None]] = {
     "3": BlockerKind.TIMING,
 }
 
+#: The step that owns ``professional-review``. ``STEP_BLOCKER_KIND`` only fixes
+#: what steps 0b and 3 must carry, which leaves step 5 — the open-kind step —
+#: free to claim professional-review, a kind the design gives to step 0b alone.
+#: Stated as its own constant because the loader is what a post-freeze ADR-0003
+#: amendment gets read by.
+PROFESSIONAL_REVIEW_STEP: Final[str] = "0b"
+
 #: Ladder label -> the not-claimable reason that step emits (contract.NotClaimableReason
 #: carries the same step numbers in its comments).
 STEP_NOT_CLAIMABLE_REASON: Final[dict[str, NotClaimableReason]] = {
@@ -89,6 +96,11 @@ def check_combination(
         if fixed is not None and blocker_kind is not fixed:
             raise LadderError(
                 f"{where}: step {step} blocks with {fixed}, label says {blocker_kind}"
+            )
+        if blocker_kind is BlockerKind.PROFESSIONAL_REVIEW and step != PROFESSIONAL_REVIEW_STEP:
+            raise LadderError(
+                f"{where}: {BlockerKind.PROFESSIONAL_REVIEW} belongs to step "
+                f"{PROFESSIONAL_REVIEW_STEP} alone, label says step {step}"
             )
     elif blocker_kind is not None:
         raise LadderError(f"{where}: {state} carries no blocker kind, label says {blocker_kind}")
