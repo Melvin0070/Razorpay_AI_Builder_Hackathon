@@ -11,6 +11,7 @@ extra -- only ``make serve`` does.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -33,13 +34,7 @@ _ACTIONS: dict[str, Any] = {
     "flag": gate.flag,
 }
 
-#: Placeholder audit timestamp. D18 bans reading the system clock outside
-#: cli.py, and every gate action currently raises NotImplementedError before
-#: this value would ever reach a written entry -- so it exists only to satisfy
-#: the ``ts`` parameter shape, not to record a real time. Lane O should thread
-#: a real clock (e.g. cli.py's ``now_iso``) through ``create_app`` when the
-#: gate is wired for real, rather than reading it here.
-PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"
+PLACEHOLDER_TS = "1970-01-01T00:00:00+00:00"  # compatibility default for direct unit calls
 
 
 def find_finding(report: BatchReport, finding_id: str) -> TriagedFinding | None:
@@ -77,7 +72,7 @@ def dispatch_gate_action(
     return fn(finding_id, report, log, actor=actor, ts=ts, as_of=report.as_of)
 
 
-def create_app(report_path: Path):
+def create_app(report_path: Path, *, clock: Callable[[], str] | None = None):
     """Returns a ``fastapi.FastAPI`` app. Untyped return because FastAPI is
     imported lazily below, not at module scope."""
     try:
@@ -105,9 +100,14 @@ def create_app(report_path: Path):
     def gate_action(action: str, finding_id: str) -> JSONResponse:
         log = AuditLog(Path("out/audit.jsonl"))
         try:
-            dispatch_gate_action(action, finding_id, report, log, Path("out/claims"))
-        except NotImplementedError as exc:
-            raise HTTPException(status_code=501, detail=str(exc)) from exc
+            dispatch_gate_action(
+                action,
+                finding_id,
+                report,
+                log,
+                Path("out/claims"),
+                ts=(clock or (lambda: PLACEHOLDER_TS))(),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except KeyError as exc:

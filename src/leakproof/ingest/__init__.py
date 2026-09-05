@@ -181,8 +181,16 @@ settlement file; the orders and bank CSVs only ever produce the header one:
 from __future__ import annotations
 
 from leakproof.ingest.bank import parse_bank
+from leakproof.ingest.evidence import parse_evidence
 from leakproof.ingest.orders import parse_orders
 from leakproof.ingest.profile import ProfileError, load_profile
 from leakproof.ingest.settlement import parse_settlement_file
 
-__all__ = ["ProfileError", "load_profile", "parse_bank", "parse_orders", "parse_settlement_file"]
+__all__ = [
+    "ProfileError",
+    "load_profile",
+    "parse_bank",
+    "parse_evidence",
+    "parse_orders",
+    "parse_settlement_file",
+]

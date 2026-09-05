@@ -12,8 +12,8 @@ def test_verify_runs_registered_gates(capsys):
 
 
 def test_unbuilt_commands_name_their_lane(capsys):
-    assert main(["demo"]) == 2
-    assert "lane G" in capsys.readouterr().err
+    assert main(["throughput"]) == 2
+    assert "lane N" in capsys.readouterr().err
 
 
 def test_a_built_command_is_not_in_the_unbuilt_table():

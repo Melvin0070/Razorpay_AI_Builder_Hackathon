@@ -17,12 +17,15 @@ UNEXPLAINED (deterministic basis), and the rupees are partitioned accordingly.
 
 ## Status
 
-Wave 0 of 5: foundation. The seams every module is coded against are frozen
-(`src/leakproof/contract.py`, `types.py`, `scenarios.py`); the pipeline is
-stubs. Progress by lane: [issues](https://github.com/Melvin0070/Razorpay_AI_Builder_Hackathon/issues),
-one per lane, one milestone per wave. How it is being built:
-[docs/plans/agent-team-build-strategy.md](docs/plans/agent-team-build-strategy.md).
-What broke along the way: [docs/build-log.md](docs/build-log.md).
+Demo build complete: ingestion, deterministic reconciliation and detection,
+evidence triage, drafting, human gating, audit packs, and dashboard rendering
+are wired end to end. `make metrics` publishes the generated demo batch's
+measured figures; throughput was not benchmarked in this build.
+
+Current demo measurement (one 150-order synthetic batch): recall **90.0%**,
+precision **34.0%**, rupee agreement **100.0%**, strict match rate **96.7%**,
+and adjusted match rate **98.6%**. The 26-case holdout is reported separately
+by the metrics API and is never included in those headline figures.
 
 ## Run
 
@@ -34,6 +37,7 @@ make verify     # deterministic: every hard gate, zero network, no API key
 make demo       # emits out/demo.html, self-contained, keyless   (lane G)
 make serve      # FastAPI, only for the live approve interaction  (lanes G, O)
 make triage     # opt-in LLM job; needs ANTHROPIC_API_KEY         (lane M)
+make metrics    # regenerate the demo batch and print measured accuracy
 make lint       # ruff
 ```
 
