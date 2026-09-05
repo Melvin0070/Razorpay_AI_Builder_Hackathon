@@ -12,6 +12,7 @@ from pathlib import Path
 
 from leakproof.contract import LineKind, TransactionType, make_line_id
 from leakproof.ingest.reasons import (
+    NOT_VALID_UTF8,
     amount_not_numeric,
     bad_date,
     column_count,
@@ -22,6 +23,8 @@ from leakproof.ingest.reasons import (
 from leakproof.ingest.settlement import (
     CSV_HINT,
     SETTLEMENT_COLUMNS,
+    SUMMARY_ROW_MISSING_HINT,
+    TRAILING_TAB_HINT,
     parse_settlement_file,
 )
 from leakproof.types import QuarantinedRow
@@ -302,6 +305,212 @@ def test_fully_unknown_transaction_type_maps_to_other(tmp_path):
     line = result.lines[0]
     assert line.txn_type is TransactionType.OTHER
     assert line.transaction_type_raw == "TotallyNovelType"
+
+
+# --------------------------------------------------------------------------- #
+# S1: undecodable bytes quarantine only their own row; physical splitting
+# survives control characters str.splitlines() would treat as line breaks.
+# --------------------------------------------------------------------------- #
+
+
+def test_undecodable_byte_quarantines_only_that_row(tmp_path):
+    """An Excel re-save as Windows-1252 (``Caf\\xe9``) is not valid UTF-8."""
+    bad_row = (
+        _order_row(**{"order-id": "ORD-BAD", "marketplace-name": "PLACEHOLDER"})
+        .encode("utf-8")
+        .replace(b"PLACEHOLDER", b"Caf\xe9")
+    )
+    good_row = _order_row(**{"order-id": "ORD-2", "posted-date": "2026-08-17"}).encode("utf-8")
+    path = tmp_path / "badutf8.txt"
+    path.write_bytes(
+        b"\n".join([HEADER_ROW.encode(), _summary_row().encode(), bad_row, good_row]) + b"\n"
+    )
+
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == (_q(path.name, 3, NOT_VALID_UTF8),)
+    assert len(result.lines) == 1
+    assert result.lines[0].line_id == f"{path.name}:4"
+    assert result.header is not None
+
+
+def test_vertical_tab_inside_a_field_keeps_physical_numbering(tmp_path):
+    """``bytes.splitlines()`` breaks only on \\n, \\r, \\r\\n -- a stray
+    \\x0b inside a field must not be treated as a line break the way
+    ``str.splitlines()`` would."""
+    path = _write(
+        tmp_path,
+        "vtab.txt",
+        [
+            HEADER_ROW,
+            _summary_row(),
+            _order_row(**{"order-id": "ORD-1", "marketplace-name": "Amazon.in\x0bExtra"}),
+            _order_row(**{"order-id": "ORD-2", "posted-date": "2026-08-17"}),
+        ],
+    )
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == ()
+    assert len(result.lines) == 2
+    assert result.lines[0].line_id == f"{path.name}:3"
+    assert result.lines[1].line_id == f"{path.name}:4"
+
+
+# --------------------------------------------------------------------------- #
+# S3: per-file separator detection falls back to a transaction row, not
+# straight to '.', when the summary row's total-amount is unreadable.
+# --------------------------------------------------------------------------- #
+
+
+def test_separator_detected_from_transaction_row_when_summary_amount_unreadable(tmp_path):
+    """The reviewer's exact probe: summary total-amount is unreadable, the
+    transaction row is comma-decimal. Only row 2 quarantines; the transaction
+    row parses under the separator detected from itself, not '.'."""
+    path = _write(
+        tmp_path,
+        "sep.txt",
+        [HEADER_ROW, _summary_row(**{"total-amount": "oops"}), _order_row(amount="100,00")],
+    )
+    result = parse_settlement_file(path)
+
+    assert result.header is None
+    assert result.quarantined == (_q(path.name, 2, amount_not_numeric("oops")),)
+    assert len(result.lines) == 1
+    assert result.lines[0].line_id == f"{path.name}:3"
+    assert result.lines[0].amount_paise == 10000
+
+
+# --------------------------------------------------------------------------- #
+# S4: a leading UTF-8 BOM does not turn a valid file into "unknown header
+# layout".
+# --------------------------------------------------------------------------- #
+
+
+def test_bom_valid_settlement_file_parses_with_no_quarantine(tmp_path):
+    content = ("﻿" + HEADER_ROW + "\n" + _summary_row() + "\n" + _order_row() + "\n").encode("utf-8")
+    path = tmp_path / "bom.txt"
+    path.write_bytes(content)
+
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == ()
+    assert result.hint is None
+    assert result.header is not None
+    assert len(result.lines) == 1
+
+
+# --------------------------------------------------------------------------- #
+# S5: a trailing tab on every row still quarantines on column count, but the
+# hint names the actual cause.
+# --------------------------------------------------------------------------- #
+
+
+def test_trailing_tab_on_every_row_names_the_cause_in_the_hint(tmp_path):
+    rows = [HEADER_ROW + "\t", _summary_row() + "\t", _order_row() + "\t"]
+    path = _write(tmp_path, "trailingtab.txt", rows)
+
+    result = parse_settlement_file(path)
+
+    assert result.hint == TRAILING_TAB_HINT
+    assert result.header is None
+    assert result.lines == ()
+    assert len(result.quarantined) == 3
+    for q in result.quarantined:
+        assert q.reason == column_count(24, 25, "tab")
+
+
+# --------------------------------------------------------------------------- #
+# S6: blank lines are skipped, never quarantined, and physical numbering
+# survives them.
+# --------------------------------------------------------------------------- #
+
+
+def test_blank_lines_are_skipped_and_physical_numbering_is_preserved(tmp_path):
+    rows = [
+        HEADER_ROW,
+        _summary_row(),
+        _order_row(**{"order-id": "ORD-1"}),
+        "",  # interior blank line
+        _order_row(**{"order-id": "ORD-2", "posted-date": "2026-08-17"}),
+        "",  # trailing blank line
+    ]
+    path = _write(tmp_path, "blank.txt", rows)
+
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == ()
+    assert len(result.lines) == 2
+    assert result.lines[0].line_id == f"{path.name}:3"
+    assert result.lines[1].line_id == f"{path.name}:5"
+
+
+# --------------------------------------------------------------------------- #
+# S7: a missing summary row must not eat the first real transaction row.
+# --------------------------------------------------------------------------- #
+
+
+def test_missing_summary_row_parses_every_row_from_two_onward_as_a_transaction(tmp_path):
+    rows = [
+        HEADER_ROW,
+        _order_row(**{"order-id": "ORD-1"}),
+        _order_row(**{"order-id": "ORD-2", "posted-date": "2026-08-17"}),
+    ]
+    path = _write(tmp_path, "nosummary.txt", rows)
+
+    result = parse_settlement_file(path)
+
+    assert result.header is None
+    assert result.quarantined == ()
+    assert result.hint == SUMMARY_ROW_MISSING_HINT
+    assert len(result.lines) == 2
+    assert result.lines[0].line_id == f"{path.name}:2"
+    assert result.lines[1].line_id == f"{path.name}:3"
+
+
+# --------------------------------------------------------------------------- #
+# S10(a): line_id stays physical after a quarantined middle row.
+# --------------------------------------------------------------------------- #
+
+
+def test_line_id_stays_physical_after_a_quarantined_middle_row(tmp_path):
+    rows = [
+        HEADER_ROW,
+        _summary_row(),
+        _order_row(**{"order-id": "ORD-1"}),
+        _order_row(**{"amount": "not-a-number", "order-id": "ORD-BAD"}),
+        _order_row(**{"order-id": "ORD-2", "posted-date": "2026-08-17"}),
+    ]
+    path = _write(tmp_path, "midbad.txt", rows)
+
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == (_q(path.name, 4, amount_not_numeric("not-a-number")),)
+    assert len(result.lines) == 2
+    assert result.lines[0].line_id == f"{path.name}:3"
+    assert result.lines[1].line_id == f"{path.name}:5"
+
+
+# --------------------------------------------------------------------------- #
+# S10(b): end-to-end comma-decimal file through parse_settlement_file, not
+# just the parsing-helper unit tests.
+# --------------------------------------------------------------------------- #
+
+
+def test_comma_decimal_file_parses_end_to_end(tmp_path):
+    rows = [
+        HEADER_ROW,
+        _summary_row(**{"total-amount": "1234,50"}),
+        _order_row(amount="500,00"),
+    ]
+    path = _write(tmp_path, "comma.txt", rows)
+
+    result = parse_settlement_file(path)
+
+    assert result.quarantined == ()
+    assert result.header is not None
+    assert result.header.total_amount_paise == 123450
+    assert len(result.lines) == 1
+    assert result.lines[0].amount_paise == 50000
 
 
 def _q(source_file: str, row: int, reason: str) -> QuarantinedRow:
