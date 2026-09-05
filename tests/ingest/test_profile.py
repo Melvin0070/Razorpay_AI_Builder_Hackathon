@@ -182,3 +182,16 @@ def test_capability_date_rejects_forms_outside_the_shared_grammar(tmp_path, raw)
 
     assert str(path) in str(exc_info.value)
     assert raw in str(exc_info.value)
+
+
+# --------------------------------------------------------------------------- #
+# G8: ProfileError is part of this package's public surface, not something a
+# caller must reach into ``leakproof.ingest.profile`` to catch.
+# --------------------------------------------------------------------------- #
+
+
+def test_profile_error_is_exported_from_the_package():
+    import leakproof.ingest
+
+    assert leakproof.ingest.ProfileError is ProfileError
+    assert "ProfileError" in leakproof.ingest.__all__
