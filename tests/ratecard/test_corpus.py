@@ -17,6 +17,30 @@ def test_every_rule_carries_a_citation_with_a_url_and_an_as_of_date(card):
         assert isinstance(c.verified, bool), rule.rule_id
 
 
+#: Rules whose rate is derived from a read source rather than read off one. The
+#: TCS aggregate is the CGST leg doubled, and the settlement file withholds the
+#: aggregate; no page states that figure, so no page for it was read.
+DERIVED_RATES = {"cgst-52-2018-tcs-aggregate", "cgst-15-2024-tcs-aggregate"}
+
+
+def test_a_derived_rate_is_never_marked_verified(card):
+    """D14: verified is true only where the primary page for THAT number was
+    read. A derived figure has no such page, however solid the arithmetic."""
+    for rule_id in sorted(DERIVED_RATES):
+        rule = next(r for r in card.rules if r.rule_id == rule_id)
+        assert rule.citation.verified is False, rule_id
+
+
+def test_a_citation_that_says_something_was_not_read_is_not_verified(corpus_documents):
+    """The standard, not two rule ids: a label admitting an unread source and a
+    verified:true flag beside it is the pair D14 exists to prevent."""
+    for name, doc in corpus_documents.items():
+        for raw in doc.get("rules", ()):
+            citation = raw.get("citation")
+            if citation and "not read" in citation["label"]:
+                assert citation["verified"] is False, f"{name}:{raw['rule_id']}"
+
+
 def test_rule_ids_are_unique(card):
     ids = [r.rule_id for r in card.rules]
     assert len(ids) == len(set(ids))
