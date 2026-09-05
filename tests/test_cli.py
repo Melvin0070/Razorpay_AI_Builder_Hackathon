@@ -12,8 +12,16 @@ def test_verify_runs_registered_gates(capsys):
 
 
 def test_unbuilt_commands_name_their_lane(capsys):
-    assert main(["gen"]) == 2
-    assert "lane B" in capsys.readouterr().err
+    assert main(["demo"]) == 2
+    assert "lane G" in capsys.readouterr().err
+
+
+def test_a_built_command_is_not_in_the_unbuilt_table():
+    # gen moved out of NOT_BUILT at the Wave 1 close; the table and the
+    # dispatch have to agree or a wired command still exits 2.
+    from leakproof.cli import NOT_BUILT
+
+    assert "gen" not in NOT_BUILT
 
 
 def test_module_entry_point():

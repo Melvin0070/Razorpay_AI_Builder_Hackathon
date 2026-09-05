@@ -474,4 +474,6 @@ LABELS_FILE: Final[str] = "src/leakproof/labels/claimability.json"
 #: SHA-256 of ``LABELS_FILE`` at the freeze. ``None`` until lane F merges and the
 #: integrator freezes the labels at the Wave 1 close. Once set, a test fails if
 #: the file changes without the ADR-0003 amendment procedure.
-FROZEN_LABELS_SHA256: Final[str | None] = None
+FROZEN_LABELS_SHA256: Final[str | None] = (
+    "e3591d89b657b6e4d65f18ef3210efe56863d559978580ede7e06a7821ea5a87"
+)
