@@ -110,3 +110,58 @@ def test_boundary_reports_render_identically_in_both_modes_above_the_gate():
     should be byte-identical between static and served for a boundary state."""
     report = _report()
     assert render(report, mode="static") == render(report, mode="served")
+
+
+def test_small_clean_batch_with_quarantined_noise_is_not_unparsed():
+    """finding 4: ``dispositions.quarantine`` counts malformed *rows*,
+    ``order_count`` counts *orders* -- comparing them directly misfires when
+    a small, otherwise-clean batch has a few more noisy leftover rows than
+    it has orders. Both orders here matched fine, so this is a zero-
+    exceptions batch, not an unparsed one."""
+    report = _report(
+        order_count=2,
+        rupee_lines=RupeeLines(
+            claim_ready=0,
+            blocked=0,
+            not_claimable=0,
+            tax_review=0,
+            unexplained=0,
+            below_materiality=0,
+            below_materiality_rows=0,
+        ),
+        match_rates=MatchRates(total_orders=2, matched=2, class6_flagged=0, quarantined_rows=3),
+        dispositions=DispositionCounts(
+            quarantine=3,
+            uncovered=0,
+            out_of_window=0,
+            config_error=0,
+            quarantine_reasons=(
+                QuarantinedRow("settlement_2026-08-14.txt:1", "blank line"),
+                QuarantinedRow("settlement_2026-08-14.txt:2", "blank line"),
+                QuarantinedRow("settlement_2026-08-14.txt:999", "trailer row, not a transaction"),
+            ),
+        ),
+    )
+    html = render(report, mode="static")
+    assert "2 orders reconciled. No discrepancies above ₹10." in html
+    assert "did not parse" not in html
+
+
+def test_nothing_parsed_with_mixed_reasons_does_not_claim_same_reason():
+    """finding 10: "…N more, same reason" is only true when the remaining
+    rows actually share one reason."""
+    reasons = (
+        QuarantinedRow("settlement_2026-08-14.txt:1", "amount not numeric: '1,240.00'"),
+        QuarantinedRow("settlement_2026-08-14.txt:2", "amount not numeric: '600.00'"),
+        QuarantinedRow("settlement_2026-08-14.txt:3", "expected 24 tab-separated columns, found 1"),
+        QuarantinedRow("settlement_2026-08-14.txt:4", "delivery_date before order_date"),
+    )
+    report = _report(
+        dispositions=DispositionCounts(
+            quarantine=4, uncovered=0, out_of_window=0, config_error=0, quarantine_reasons=reasons
+        ),
+        match_rates=MatchRates(150, 0, 0, 4),
+    )
+    html = render(report, mode="static")
+    assert "…2 more</div>" in html
+    assert "same reason" not in html

@@ -65,13 +65,11 @@ def test_dispatch_gate_action_unknown_finding():
 
 
 def test_load_report_round_trips_the_fixture():
-    loaded = load_report(FIXTURE_PATH)
-    assert loaded.batch_id == REPORT.batch_id
-    assert loaded.rupee_lines.identified == REPORT.rupee_lines.identified
-    assert len(loaded.queue) == len(REPORT.queue)
-    assert loaded.queue[0].finding.finding_id == REPORT.queue[0].finding.finding_id
-    assert loaded.queue[0].gate is not None
-    assert loaded.queue[0].gate.audit_seq == 118
+    """Full equality, not a handful of sampled fields (finding 9): ``load.py``
+    uses explicit kwargs, so a new ``BatchReport`` field with a default would
+    otherwise be silently dropped on load while every field-by-field
+    assertion kept passing."""
+    assert load_report(FIXTURE_PATH) == REPORT
 
 
 # --------------------------------------------------------------------------- #

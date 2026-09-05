@@ -11,6 +11,7 @@ extra -- only ``make serve`` does.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -88,7 +89,12 @@ def create_app(report_path: Path):
             "`uv sync --extra serve` (make verify never needs it, D16)."
         ) from exc
 
-    report = load_report(Path(report_path))
+    # ``render``'s explicit mode="served" below is what actually decides gate
+    # rendering (D16); stamping report.mode to match keeps the two from
+    # silently disagreeing about which mode this in-memory report is being
+    # shown in (finding 12) -- whatever mode the on-disk report claims for
+    # itself, the live server is always the served path.
+    report = replace(load_report(Path(report_path)), mode="served")
     app = FastAPI(title="LeakProof")
 
     @app.get("/", response_class=HTMLResponse)

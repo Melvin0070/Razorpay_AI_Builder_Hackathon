@@ -121,7 +121,7 @@ CSS: str = """
   .evreq .ok::before  { content: "\\2611  "; }
   .evreq .miss::before{ content: "\\2610  "; }
   .evreq .miss { font-weight: 700; }
-  .unver { font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  .unver, .pend { font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
            border: 1px dotted var(--ink-2); color: var(--ink-2); padding: 1px 5px;
            margin-left: 5px; }
   .claim { font-size: 11.5px; color: var(--ink-2); background: var(--bg-3);

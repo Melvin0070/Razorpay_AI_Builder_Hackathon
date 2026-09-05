@@ -105,32 +105,75 @@ def state_css(state: State) -> str:
     return _STATE_CSS[state]
 
 
-#: The four fixed override-button labels (design decision 4A: a bounded set
-#: of 4 so a long blocker string cannot break layout). BlockerKind has 3
-#: values and NotClaimableReason has 3 values -- 6 inputs onto 4 labels, so
-#: two reasons intentionally share the nearest-fit label (documented in the
-#: report, Open questions): NotClaimableReason.RULE reads as an evidence-of-
-#: eligibility gap and shares "DRAFT WITHOUT EVIDENCE"; WINDOW_EXPIRED shares
-#: the window-themed label with BlockerKind.TIMING.
+#: Six fixed override labels, a total function over (state, blocker kind or
+#: not-claimable reason) -- ADR-0007. The set grew from four: the original
+#: four collapsed BLOCKED(timing) with NOT-CLAIMABLE(window-expired), and
+#: NOT-CLAIMABLE(rule) with BLOCKED(seller-action), which put "DRAFT WITHOUT
+#: EVIDENCE" -- a missing-document reading -- on a policy exclusion, and put
+#: "the window resolves" on a window that had already closed for good. Each
+#: state now only ever looks at its own axis (BLOCKED reads blocker_kind,
+#: NOT-CLAIMABLE reads not_claimable_reason), so a combination the ladder
+#: cannot produce (e.g. BLOCKED with no blocker_kind) raises rather than
+#: silently falling back to a nearest fit.
+_OVERRIDE_TABLE: dict[tuple[State, BlockerKind | NotClaimableReason], tuple[str, str]] = {
+    (State.BLOCKED, BlockerKind.SELLER_ACTION): ("DRAFT WITHOUT EVIDENCE", "Drafts without"),
+    (State.BLOCKED, BlockerKind.TIMING): (
+        "DRAFT BEFORE WINDOW RESOLVES",
+        "Drafts before the window resolves",
+    ),
+    (State.BLOCKED, BlockerKind.PROFESSIONAL_REVIEW): (
+        "DRAFT WITHOUT CA REVIEW",
+        "Drafts without",
+    ),
+    (State.NOT_CLAIMABLE, NotClaimableReason.EVIDENCE_UNOBTAINABLE): (
+        "DRAFT WITHOUT EVIDENCE THAT CANNOT EXIST",
+        "Drafts without",
+    ),
+    (State.NOT_CLAIMABLE, NotClaimableReason.RULE): (
+        "DRAFT DESPITE EXCLUSION",
+        "Drafts despite the exclusion",
+    ),
+    (State.NOT_CLAIMABLE, NotClaimableReason.WINDOW_EXPIRED): (
+        "DRAFT AFTER WINDOW CLOSED",
+        "Drafts after the window closed",
+    ),
+}
+
+
+def _override_key(
+    state: State, blocker_kind: BlockerKind | None, not_claimable_reason: NotClaimableReason | None
+) -> tuple[State, BlockerKind | NotClaimableReason | None]:
+    if state is State.BLOCKED:
+        return (state, blocker_kind)
+    if state is State.NOT_CLAIMABLE:
+        return (state, not_claimable_reason)
+    return (state, None)
+
+
+def _override_entry(
+    state: State, blocker_kind: BlockerKind | None, not_claimable_reason: NotClaimableReason | None
+) -> tuple[str, str]:
+    entry = _OVERRIDE_TABLE.get(_override_key(state, blocker_kind, not_claimable_reason))
+    if entry is None:
+        raise ValueError(
+            f"no override label for state={state!r} blocker_kind={blocker_kind!r} "
+            f"not_claimable_reason={not_claimable_reason!r}"
+        )
+    return entry
+
+
 def override_label(
-    blocker_kind: BlockerKind | None, not_claimable_reason: NotClaimableReason | None
+    state: State, blocker_kind: BlockerKind | None, not_claimable_reason: NotClaimableReason | None
 ) -> str:
-    if blocker_kind is BlockerKind.SELLER_ACTION:
-        return "DRAFT WITHOUT EVIDENCE"
-    if blocker_kind is BlockerKind.TIMING:
-        return "DRAFT BEFORE WINDOW RESOLVES"
-    if blocker_kind is BlockerKind.PROFESSIONAL_REVIEW:
-        return "DRAFT WITHOUT CA REVIEW"
-    if not_claimable_reason is NotClaimableReason.EVIDENCE_UNOBTAINABLE:
-        return "DRAFT WITHOUT EVIDENCE THAT CANNOT EXIST"
-    if not_claimable_reason is NotClaimableReason.WINDOW_EXPIRED:
-        return "DRAFT BEFORE WINDOW RESOLVES"
-    if not_claimable_reason is NotClaimableReason.RULE:
-        return "DRAFT WITHOUT EVIDENCE"
-    raise ValueError(
-        f"no override label for blocker_kind={blocker_kind!r} "
-        f"not_claimable_reason={not_claimable_reason!r}"
-    )
+    return _override_entry(state, blocker_kind, not_claimable_reason)[0]
+
+
+def override_consequence_lead(
+    state: State, blocker_kind: BlockerKind | None, not_claimable_reason: NotClaimableReason | None
+) -> str:
+    """The consequences text's opening phrase, chosen to match the label's
+    tense (ADR-0007): an exclusion is never phrased as something missing."""
+    return _override_entry(state, blocker_kind, not_claimable_reason)[1]
 
 
 #: Filter-chip / group-header text. Deliberately distinct from the State enum

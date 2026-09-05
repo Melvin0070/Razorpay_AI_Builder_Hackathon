@@ -14,6 +14,7 @@ from leakproof.contract import (
     MATERIALITY_FLOOR_PAISE,
     STATE_ORDER,
     ErrorClass,
+    EvidenceStatus,
     Mechanism,
     RupeeLine,
     State,
@@ -31,12 +32,13 @@ from leakproof.dashboard.format import (
     format_rupees_bare,
     format_rupees_paise,
     named_blocker,
+    override_consequence_lead,
     override_label,
     oxford_join,
     state_css,
 )
 from leakproof.dashboard.html_utils import esc, js_str
-from leakproof.types import BatchReport, Deadline, Finding, TriagedFinding
+from leakproof.types import BatchReport, Deadline, EligibilityCheck, Finding, TriagedFinding
 
 # --------------------------------------------------------------------------- #
 # Page assembly
@@ -49,11 +51,9 @@ def render_page(report: BatchReport, *, mode: str) -> str:
 
     grouped = _group_by_state(report.queue)
     boundary = _boundary_state(report)
-    default_fid = report.queue[0].finding.finding_id if report.queue else None
+    default_fid = _default_fid(report, mode)
 
     body = [
-        "<title>LeakProof — exception review</title>",
-        f"<style>{CSS}</style>",
         '<div class="frame">',
         _header(report),
         f'<div class="metrics">{_metrics(report)}</div>',
@@ -70,7 +70,35 @@ def render_page(report: BatchReport, *, mode: str) -> str:
         )
     body.append("</div>")
     body.append(_script())
-    return "\n".join(body) + "\n"
+
+    doc = [
+        "<!doctype html>",
+        "<html>",
+        "<head>",
+        '<meta charset="utf-8">',
+        "<title>LeakProof — exception review</title>",
+        f"<style>{CSS}</style>",
+        "</head>",
+        "<body>",
+        *body,
+        "</body>",
+        "</html>",
+    ]
+    return "\n".join(doc) + "\n"
+
+
+def _default_fid(report: BatchReport, mode: str) -> str | None:
+    """The row shown open by default. Static mode keeps the wireframe's
+    plain first-row selection; served mode -- the pitch-video path -- must
+    not default to a row that already has a gate record, or ``make serve``
+    opens with zero buttons until someone clicks a second row."""
+    if not report.queue:
+        return None
+    if mode == "served":
+        for item in report.queue:
+            if item.gate is None:
+                return item.finding.finding_id
+    return report.queue[0].finding.finding_id
 
 
 def _group_by_state(
@@ -85,12 +113,21 @@ def _group_by_state(
 def _boundary_state(report: BatchReport) -> str | None:
     """Which of the three frame-4 empty/boundary narratives applies, or None
     for the normal queue. Order matters: an unparsed batch is also, trivially,
-    a batch with no covered rows, so "nothing parsed" is checked first."""
+    a batch with no covered rows, so "nothing parsed" is checked first.
+
+    ``dispositions.quarantine`` counts malformed settlement *rows*;
+    ``order_count`` counts *orders*. Comparing them directly (rows >= orders)
+    misfires on a clean batch that just has a few noisy leftover rows -- e.g.
+    2 orders, 3 quarantined header/footer lines, both orders matched fine --
+    which is a "zero exceptions" batch, not an unparsed one. "Nothing parsed"
+    instead means literally nothing came out of matching: some row was
+    quarantined and not one order matched."""
     if report.queue:
         return None
-    if report.order_count > 0 and report.dispositions.quarantine >= report.order_count:
+    d, m = report.dispositions, report.match_rates
+    if report.order_count > 0 and d.quarantine > 0 and m.matched == 0:
         return "unparsed"
-    if report.order_count > 0 and report.dispositions.uncovered >= report.order_count:
+    if report.order_count > 0 and d.uncovered >= report.order_count:
         return "uncovered"
     return "zero"
 
@@ -158,15 +195,17 @@ def _tier2(report: BatchReport) -> str:
             '<span style="width:100%;background:var(--bg)"></span></div>'
         )
 
+    # "window expired" is pinned bold regardless of which reason is largest
+    # (design doc: "the line that makes a seller act") -- not the biggest
+    # figure, which drifts with the data (finding 7).
     nc_reasons = (
         (r.not_claimable_rule, "excluded by rule"),
         (r.not_claimable_window_expired, "window expired"),
         (r.not_claimable_evidence_unobtainable, "evidence unobtainable"),
     )
-    biggest = max(nc_reasons, key=lambda t: t[0])[1] if identified else None
     nc_sub = " · ".join(
         f"<b>{format_rupees(amt)} {label}</b>"
-        if label == biggest
+        if label == "window expired"
         else f"{format_rupees(amt)} {label}"
         for amt, label in nc_reasons
     )
@@ -229,11 +268,19 @@ def _tier4(report: BatchReport) -> str:
 
 
 def _filters(grouped: dict[State, list[TriagedFinding]], total: int) -> str:
-    chips = [f'<span class="chipf on" data-state="all" onclick="lpFilter(this)">All {total}</span>']
+    # Real <button>s, not <span onclick>, so the filter row is keyboard-
+    # operable (finding 12). These are outside the <!-- gate --> region and
+    # are not part of D16's "static mode has no buttons" rule, which is
+    # about the per-row gate, not chrome that filters an already-rendered
+    # page in both modes alike.
+    chips = [
+        '<button type="button" class="chipf on" data-state="all" onclick="lpFilter(this)">'
+        f"All {total}</button>"
+    ]
     for s in STATE_ORDER:
         chips.append(
-            f'<span class="chipf" data-state="{s.value}" onclick="lpFilter(this)">'
-            f"{FILTER_LABELS[s]} {len(grouped[s])}</span>"
+            f'<button type="button" class="chipf" data-state="{s.value}" onclick="lpFilter(this)">'
+            f"{FILTER_LABELS[s]} {len(grouped[s])}</button>"
         )
     chips_html = "".join(chips)
     return (
@@ -307,7 +354,7 @@ def _queue_row(item: TriagedFinding, *, selected: bool) -> str:
     fid = esc(f.finding_id)
     return (
         f'<tr class="row{sel_cls}" data-fid="{fid}" data-state="{st.state.value}" '
-        f"onclick=\"lpSelect('{js_str(f.finding_id)}')\">"
+        f"onclick=\"lpSelect('{esc(js_str(f.finding_id))}')\">"
         f'<td class="mono">{esc(f.order_id)}</td>'
         f"<td>{esc(class_column(f.error_class))}</td>"
         f'<td class="amt">{format_rupees_bare(f.amount_paise)}</td>'
@@ -337,7 +384,7 @@ def _detail_pane(item: TriagedFinding, mode: str, *, is_default: bool) -> str:
     parts = [
         f'<div class="detailpane" data-fid="{fid}" data-state="{st.state.value}"{hidden}>',
         f"<h2>{esc(class_label(f.error_class))} · {format_rupees(f.amount_paise)}</h2>",
-        f'<div class="sub">Order {esc(f.order_id)} · SKU {esc(f.sku)} · {esc(f.category_id)}</div>',
+        f'<div class="sub">{_finding_subline(f)}</div>',
         f'<div style="margin-bottom:11px"><span class="st {state_css(st.state)}">{st.state.value}'
         f'</span> <span class="why">{esc(st.reason)}</span></div>',
         _source_rows(f),
@@ -349,6 +396,18 @@ def _detail_pane(item: TriagedFinding, mode: str, *, is_default: bool) -> str:
         "</div>",
     ]
     return "".join(parts)
+
+
+def _finding_subline(f: Finding) -> str:
+    """"Order X · SKU Y · Z", omitting a missing SKU or category (and its
+    separator) instead of leaving a dangling "SKU  · " -- what lane J's
+    class-6 absence findings and orphan rows produce (finding 12)."""
+    parts = [f"Order {esc(f.order_id)}"]
+    if f.sku:
+        parts.append(f"SKU {esc(f.sku)}")
+    if f.category_id:
+        parts.append(esc(f.category_id))
+    return " · ".join(parts)
 
 
 def _source_rows(f: Finding) -> str:
@@ -387,22 +446,38 @@ def _recomputation(f: Finding) -> str:
 
 
 def _evidence_checklist(item: TriagedFinding) -> str:
+    """The wireframe deliberately mixes eligibility rule checks in with
+    evidence requirements (design doc, "UI"): both are ☑/☐ facts the queue
+    row's state was decided on, and a rule that disqualified the claim must
+    show as unchecked, not buried in a why-line with an unrelated ☑ beside
+    it (finding 3)."""
     f, assessment = item.finding, item.assessment
     mech = f.mechanism
     header = "Evidence" if mech is Mechanism.NONE else f"Evidence — {mech.value} requires"
-    lines = []
+    lines = [_eligibility_line(c) for c in assessment.eligibility]
     for e in assessment.evidence:
-        ok = e.status.value == "satisfied"
-        cls = "ok" if ok else "miss"
+        cls = "ok" if e.status is EvidenceStatus.SATISFIED else "miss"
+        # PENDING (requested, may still arrive) and MISSING (permanently
+        # unobtainable) both render an unchecked box; without a structural
+        # marker the two read the same unless the free-text note happens to
+        # say which (finding 12) -- a "pending" tag makes it a fact of the
+        # markup, not something resting on note text a producer might omit.
+        tag = '<span class="pend">pending</span>' if e.status is EvidenceStatus.PENDING else ""
         text = esc(e.requirement)
         if e.note:
             text = f"{text} ({esc(e.note)})"
-        lines.append(f'<div class="evreq"><span class="{cls}">{text}</span></div>')
+        lines.append(f'<div class="evreq"><span class="{cls}">{text}</span>{tag}</div>')
     lines.append(_window_evidence_line(assessment.deadline))
     return (
         f'<div class="sec"><div class="h">{esc(header)}</div>'
         f'<div class="b">{"".join(lines)}</div></div>'
     )
+
+
+def _eligibility_line(check: EligibilityCheck) -> str:
+    cls = "ok" if check.passed else "miss"
+    tag = "" if check.citation.verified else '<span class="unver">rule unverified</span>'
+    return f'<div class="evreq"><span class="{cls}">{esc(check.description)}</span>{tag}</div>'
 
 
 def _window_evidence_line(deadline: Deadline) -> str:
@@ -449,11 +524,22 @@ def _gate_region(item: TriagedFinding, mode: str) -> str:
     return f'<div class="gate">{_gate_buttons(item)}</div>'
 
 
+def _artifact_file(path: str | None, filename: str) -> str:
+    """Join an artifact directory and a filename without assuming the path
+    already ends in ``/`` (finding 8: the fixture's own path happens to, but
+    a future ``GateRecord.artifact_path`` need not)."""
+    if not path:
+        return "—"
+    sep = "" if path.endswith("/") else "/"
+    return f"{path}{sep}{filename}"
+
+
 def _approved_block(item: TriagedFinding) -> str:
     finding, gate = item.finding, item.gate
     assert gate is not None
     label = "Overridden" if gate.overridden else "Approved"
-    path = gate.artifact_path or "—"
+    path = gate.artifact_path
+    written_to = esc(path) if path else "—"
     claim_text = (
         f'"{esc(item.draft.rendered_text)}" <i>(full, selectable)</i>'
         if item.draft is not None
@@ -465,10 +551,11 @@ def _approved_block(item: TriagedFinding) -> str:
         '<div class="b">'
         f'<div class="row"><div class="k">claim text</div><div>{claim_text}</div></div>'
         f'<div class="row"><div class="k">cited rows</div>'
-        f'<div class="mono">{len(finding.source_line_ids)} rows · {esc(path)}cited_rows.csv</div></div>'
+        f'<div class="mono">{len(finding.source_line_ids)} rows · '
+        f'{esc(_artifact_file(path, "cited_rows.csv"))}</div></div>'
         f'<div class="row"><div class="k">recomputation</div>'
-        f'<div class="mono">{esc(path)}recomputation.csv</div></div>'
-        f'<div class="row"><div class="k">written to</div><div class="mono">{esc(path)}</div></div>'
+        f'<div class="mono">{esc(_artifact_file(path, "recomputation.csv"))}</div></div>'
+        f'<div class="row"><div class="k">written to</div><div class="mono">{written_to}</div></div>'
         "</div></div>"
     )
 
@@ -484,21 +571,24 @@ def _static_note() -> str:
 
 def _gate_buttons(item: TriagedFinding) -> str:
     f, st = item.finding, item.state
-    fid_js = js_str(f.finding_id)
+    # esc(js_str(...)): js_str alone only escapes \, ' and newline for the JS
+    # string literal -- a stray " in a finding_id (order_id/line_id sourced
+    # from a settlement file's own basename, D19) would still close the
+    # surrounding onclick="..." attribute. esc() afterwards neutralises that
+    # (and any <, &) once the JS-level escaping is in place (finding 1).
+    fid_js = esc(js_str(f.finding_id))
     fid = esc(f.finding_id)
     result_div = f'<div class="gateresult" data-fid="{fid}" hidden></div>'
 
     if st.state is State.CLAIM_READY:
-        pack_dir = esc(f"{f.order_id}-c{int(f.error_class)}")
         return (
             '<div class="btns">'
             f'<button type="button" class="btn pri" onclick="lpGate(\'approve\',\'{fid_js}\',this)">'
             "APPROVE &amp; QUEUE</button>"
             f'<button type="button" class="btn" onclick="lpGate(\'reject\',\'{fid_js}\',this)">REJECT</button>'
             "</div>"
-            '<div class="conseq">Writes a claim pack to '
-            f"<b>claims/{pack_dir}/</b> and one audit entry. Nothing is filed. "
-            "Approving twice is a no-op.</div>"
+            '<div class="conseq">Writes a claim pack and one audit entry. '
+            "Nothing is filed. Approving twice is a no-op.</div>"
             f"{result_div}"
         )
 
@@ -516,8 +606,9 @@ def _gate_buttons(item: TriagedFinding) -> str:
             f"{result_div}"
         )
 
-    # BLOCKED or NOT-CLAIMABLE: override + reject (design decision 4A).
-    label = override_label(st.blocker_kind, st.not_claimable_reason)
+    # BLOCKED or NOT-CLAIMABLE: override + reject (design decision 4A, ADR-0007).
+    label = override_label(st.state, st.blocker_kind, st.not_claimable_reason)
+    lead = override_consequence_lead(st.state, st.blocker_kind, st.not_claimable_reason)
     item_name = named_blocker(st.reason)
     return (
         '<div class="btns">'
@@ -525,7 +616,7 @@ def _gate_buttons(item: TriagedFinding) -> str:
         f"{esc(label)}</button>"
         f'<button type="button" class="btn" onclick="lpGate(\'reject\',\'{fid_js}\',this)">REJECT</button>'
         "</div>"
-        f'<div class="conseq">Drafts without: <b>{esc(item_name)}</b>.<br>'
+        f'<div class="conseq">{esc(lead)}: <b>{esc(item_name)}</b>.<br>'
         'Pack marked <b>OVERRIDDEN</b>. Recorded as <span class="mono">approve_override</span> '
         'with <span class="mono">state_before</span>. Never enters ₹ claim-ready.</div>'
         f"{result_div}"
@@ -571,9 +662,7 @@ def _boundary_uncovered(report: BatchReport) -> str:
         f'<div class="conseq">The rate-card corpus covers {len(cov.categories)} '
         f"categories: {cats}. {d.uncovered} of {report.order_count} orders fall outside "
         "declared coverage. Detectors 1 and 2 need a rule to compare against, so they did "
-        "not run on those rows. Nothing was guessed.<br>"
-        "<i>BatchReport carries the uncovered count but not the batch's own out-of-coverage "
-        "category identifiers — see report, Interface change requests.</i></div>"
+        "not run on those rows. Nothing was guessed.</div>"
         "</div></div>"
     )
 
@@ -586,8 +675,15 @@ def _boundary_unparsed(report: BatchReport) -> str:
     )
     more = len(d.quarantine_reasons) - len(reasons)
     if more > 0:
+        # "same reason" is only true when the reasons actually agree -- don't
+        # assert it for a batch quarantined for several different causes
+        # (finding 10).
+        rest_reasons = {qr.reason for qr in d.quarantine_reasons[len(reasons) :]}
+        shown_reasons = {qr.reason for qr in reasons}
+        same_reason = len(rest_reasons | shown_reasons) == 1
+        suffix = ", same reason" if same_reason else ""
         reason_lines += (
-            f'<div class="cite" style="color:var(--ink-3)">…{more} more, same reason</div>'
+            f'<div class="cite" style="color:var(--ink-3)">…{more} more{suffix}</div>'
         )
     hint = (
         f'<div class="conseq" style="margin-top:8px"><b>Likely cause:</b> {esc(d.hint)}</div>'

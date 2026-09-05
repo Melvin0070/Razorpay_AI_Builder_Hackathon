@@ -24,6 +24,7 @@ from leakproof.dashboard.format import (
     format_rupees_bare,
     format_rupees_paise,
     named_blocker,
+    override_consequence_lead,
     override_label,
     oxford_join,
 )
@@ -67,24 +68,58 @@ def test_class_labels_and_column():
     assert class_column(ErrorClass.TAX_MISMATCH) == "7 · TCS/TDS mismatch"
 
 
-def test_override_label_covers_every_blocker_kind():
-    assert override_label(BlockerKind.SELLER_ACTION, None) == "DRAFT WITHOUT EVIDENCE"
-    assert override_label(BlockerKind.TIMING, None) == "DRAFT BEFORE WINDOW RESOLVES"
-    assert override_label(BlockerKind.PROFESSIONAL_REVIEW, None) == "DRAFT WITHOUT CA REVIEW"
+#: The six fixed labels, a total function over (state, blocker kind or
+#: not-claimable reason) -- ADR-0007 (finding 5). Every row of the table.
+OVERRIDE_TABLE_ROWS = [
+    (State.BLOCKED, BlockerKind.SELLER_ACTION, None, "DRAFT WITHOUT EVIDENCE"),
+    (State.BLOCKED, BlockerKind.TIMING, None, "DRAFT BEFORE WINDOW RESOLVES"),
+    (State.BLOCKED, BlockerKind.PROFESSIONAL_REVIEW, None, "DRAFT WITHOUT CA REVIEW"),
+    (
+        State.NOT_CLAIMABLE,
+        None,
+        NotClaimableReason.EVIDENCE_UNOBTAINABLE,
+        "DRAFT WITHOUT EVIDENCE THAT CANNOT EXIST",
+    ),
+    (State.NOT_CLAIMABLE, None, NotClaimableReason.RULE, "DRAFT DESPITE EXCLUSION"),
+    (
+        State.NOT_CLAIMABLE,
+        None,
+        NotClaimableReason.WINDOW_EXPIRED,
+        "DRAFT AFTER WINDOW CLOSED",
+    ),
+]
 
 
-def test_override_label_covers_every_not_claimable_reason():
-    assert (
-        override_label(None, NotClaimableReason.EVIDENCE_UNOBTAINABLE)
-        == "DRAFT WITHOUT EVIDENCE THAT CANNOT EXIST"
-    )
-    assert override_label(None, NotClaimableReason.WINDOW_EXPIRED) == "DRAFT BEFORE WINDOW RESOLVES"
-    assert override_label(None, NotClaimableReason.RULE) == "DRAFT WITHOUT EVIDENCE"
+@pytest.mark.parametrize("state,blocker,nc_reason,label", OVERRIDE_TABLE_ROWS)
+def test_override_label_covers_every_row_of_the_table(state, blocker, nc_reason, label):
+    assert override_label(state, blocker, nc_reason) == label
 
 
-def test_override_label_rejects_neither():
+def test_override_label_is_total_and_raises_on_unlisted_combinations():
+    """Nothing falls back to a nearest fit: a combination the ladder cannot
+    produce (BLOCKED with no blocker_kind, NOT-CLAIMABLE with no reason, a
+    blocker_kind attached to NOT-CLAIMABLE, or CLAIM-READY/UNEXPLAINED --
+    which never reach the override gate at all) raises loudly instead."""
     with pytest.raises(ValueError, match="no override label"):
-        override_label(None, None)
+        override_label(State.BLOCKED, None, None)
+    with pytest.raises(ValueError, match="no override label"):
+        override_label(State.NOT_CLAIMABLE, None, None)
+    with pytest.raises(ValueError, match="no override label"):
+        override_label(State.NOT_CLAIMABLE, BlockerKind.TIMING, None)
+    with pytest.raises(ValueError, match="no override label"):
+        override_label(State.CLAIM_READY, None, None)
+    with pytest.raises(ValueError, match="no override label"):
+        override_label(State.UNEXPLAINED, None, None)
+
+
+@pytest.mark.parametrize("state,blocker,nc_reason,_label", OVERRIDE_TABLE_ROWS)
+def test_override_consequence_lead_never_calls_an_exclusion_missing(state, blocker, nc_reason, _label):
+    """rule and window-expired are exclusions, not missing documents -- their
+    consequences text must not say "without" (finding 5)."""
+    lead = override_consequence_lead(state, blocker, nc_reason)
+    if nc_reason in (NotClaimableReason.RULE, NotClaimableReason.WINDOW_EXPIRED):
+        assert "without" not in lead.lower()
+    assert lead  # every row has a non-empty lead
 
 
 def test_named_blocker_strips_kind_prefix():
