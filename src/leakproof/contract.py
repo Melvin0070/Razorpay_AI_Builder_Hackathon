@@ -239,7 +239,7 @@ class RefundInitiator(StrEnum):
 
 #: Mechanisms a class may carry. ``make_finding`` (lane J) raises on disagreement.
 ALLOWED_MECHANISMS: Final[dict[ErrorClass, frozenset[Mechanism]]] = {
-    ErrorClass.COMMISSION_OVERCHARGE: frozenset({Mechanism.SAFE_T, Mechanism.SUPPORT_TICKET}),
+    ErrorClass.COMMISSION_OVERCHARGE: frozenset({Mechanism.SUPPORT_TICKET}),
     ErrorClass.FIXED_FEE_ERROR: frozenset({Mechanism.SUPPORT_TICKET}),
     ErrorClass.REFUND_NO_FEE_REVERSAL: frozenset({Mechanism.SAFE_T, Mechanism.SUPPORT_TICKET}),
     ErrorClass.UNPAID_PAST_CYCLE: frozenset({Mechanism.SUPPORT_TICKET}),
@@ -251,7 +251,7 @@ ALLOWED_MECHANISMS: Final[dict[ErrorClass, frozenset[Mechanism]]] = {
 #: "try the next mechanism" step, so a class with two allowed mechanisms still
 #: files under its primary one; the alternative is documentation (ADR-0005).
 PRIMARY_MECHANISM: Final[dict[ErrorClass, Mechanism]] = {
-    ErrorClass.COMMISSION_OVERCHARGE: Mechanism.SAFE_T,
+    ErrorClass.COMMISSION_OVERCHARGE: Mechanism.SUPPORT_TICKET,
     ErrorClass.FIXED_FEE_ERROR: Mechanism.SUPPORT_TICKET,
     ErrorClass.REFUND_NO_FEE_REVERSAL: Mechanism.SAFE_T,
     ErrorClass.UNPAID_PAST_CYCLE: Mechanism.SUPPORT_TICKET,
@@ -260,6 +260,9 @@ PRIMARY_MECHANISM: Final[dict[ErrorClass, Mechanism]] = {
 }
 
 #: Only SAFE-T carries a real filing window (design doc, approach B′ costs).
+#: SAFE-T is scoped to refund- and return-shaped loss, so only class 5 files
+#: through it; a fee-arithmetic dispute has no return event to start a window
+#: from and goes by support ticket (ADR-0006).
 MECHANISMS_WITH_WINDOW: Final[frozenset[Mechanism]] = frozenset({Mechanism.SAFE_T})
 
 
@@ -455,7 +458,7 @@ def classify_transaction(transaction_type: str) -> TransactionType:
 #: each, so an unpinned identifier would make the coverage declaration false).
 #: Node names only; every rate lives in ratecard/ and generator/ separately.
 CATEGORY_NODES: Final[dict[str, str]] = {
-    "electronics-accessories": "Electronics Accessories",
+    "electronics-accessories": "Accessories - Electronics, PC and Wireless",
     "home-kitchen": "Kitchen - Cookware, Tableware & Dinnerware",
     "apparel": "Apparel - Shirts",
 }
