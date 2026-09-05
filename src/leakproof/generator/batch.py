@@ -503,7 +503,9 @@ class _Builder:
         order_date = delivery - timedelta(days=self.rng.randint(2, 5))
         return order_date, delivery, posted
 
-    def _dates_before_refund(self, refund: date, *, earliest_order: date) -> tuple[date, date, date]:
+    def _dates_before_refund(
+        self, refund: date, *, earliest_order: date
+    ) -> tuple[date, date, date]:
         """Order, delivery and posted dates for a sale refunded on ``refund``:
         posted inside a cycle, 1..10 days earlier, nothing before
         ``earliest_order``."""
@@ -512,7 +514,9 @@ class _Builder:
             earliest_order + timedelta(days=1),
             refund - timedelta(days=self.rng.randint(1, MAX_SALE_TO_REFUND_DAYS)),
         )
-        delivery = max(earliest_order + timedelta(days=1), posted - timedelta(days=self.rng.randint(0, 2)))
+        delivery = max(
+            earliest_order + timedelta(days=1), posted - timedelta(days=self.rng.randint(0, 2))
+        )
         order_date = max(earliest_order, delivery - timedelta(days=self.rng.randint(1, 4)))
         if not posted < refund:
             raise AssertionError(f"sale posted {posted} not before refund {refund}")
@@ -729,7 +733,9 @@ class _Builder:
         legacy_bp = fees.legacy_referral_bp(plan.category_id, u)
         if legacy_bp > correct_bp:
             candidates.append((legacy_bp, "the pre-2026-03-16 tier"))
-        candidates.extend((correct_bp + extra, "an inflated rate") for extra in WRONG_RATE_EXTRA_BPS)
+        candidates.extend(
+            (correct_bp + extra, "an inflated rate") for extra in WRONG_RATE_EXTRA_BPS
+        )
         viable = [
             (bp, why)
             for bp, why in candidates
@@ -818,9 +824,11 @@ class _Builder:
         if plan.gift_wrap:
             cites.append(("sale", "gift_wrap"))
         plan.cites = tuple(cites)
-        edge = " (exactly at the band's inclusive upper bound)" if (
-            scenario is Scenario.C2_SLAB_BOUNDARY
-        ) else ""
+        edge = (
+            " (exactly at the band's inclusive upper bound)"
+            if (scenario is Scenario.C2_SLAB_BOUNDARY)
+            else ""
+        )
         plan.note = (
             f"closing fee {format_paise(charged)} charged vs {format_paise(correct)}: "
             f"{quantity} unit(s) keyed at {format_paise(key)}{edge} = unit price "
@@ -835,11 +843,11 @@ class _Builder:
     def _c5_refund_window(self, scenario: Scenario) -> tuple[date, date, date]:
         """(earliest refund, latest refund, earliest order date) for a class-5 case."""
         cd = self.spec.cycle_days
-        L = self.last.end
-        open_lo, open_hi = L - timedelta(days=2 * cd - 1), L - timedelta(days=cd + 1)
+        last = self.last.end
+        open_lo, open_hi = last - timedelta(days=2 * cd - 1), last - timedelta(days=cd + 1)
         earliest_order = self.coverage.start
         if scenario is Scenario.C5_AWAITING_CYCLE:
-            lo, hi = L - timedelta(days=cd - 1), L
+            lo, hi = last - timedelta(days=cd - 1), last
         elif scenario is Scenario.C5_WINDOW_EXPIRED:
             lo, hi = self.first.start + timedelta(days=1), self.first.end
         elif scenario is Scenario.C5_GST_UNREGISTERED:
@@ -964,7 +972,9 @@ class _Builder:
         else:
             delivery = self._date_in(self.coverage.start, self.as_of - timedelta(days=2 * cd + 2))
         order_date = delivery - timedelta(days=self.rng.randint(2, 5))
-        plan = self._new_plan(category, unit_price, quantity, order_date, delivery, scenario=scenario)
+        plan = self._new_plan(
+            category, unit_price, quantity, order_date, delivery, scenario=scenario
+        )
         plan.cite_order_row = True
         if scenario is Scenario.C6_PAID_LATER_CYCLE:
             cycle = self.rng.choice(self.cycles[1:])
@@ -1069,9 +1079,7 @@ class _Builder:
             )
         else:
             amount = self.rng.randrange(3_000, 30_000, 50)
-            self._sale_block(
-                plan, posted, extra=(v2.Line(*_TECH_FEE, -amount, "technology_fee"),)
-            )
+            self._sale_block(plan, posted, extra=(v2.Line(*_TECH_FEE, -amount, "technology_fee"),))
             plan.cites = (("sale", "technology_fee"),)
             plan.note = (
                 f"deduction {format_paise(amount)} under {_TECH_FEE[1]!r}, a known code the "
@@ -1175,14 +1183,14 @@ class _Builder:
     def _profile(self) -> SellerProfile:
         if self.gst_boundary is not None:
             gst = (
-                CapabilityFact(
-                    GST_CAPABILITY, False, None, self.gst_boundary - timedelta(days=1)
-                ),
+                CapabilityFact(GST_CAPABILITY, False, None, self.gst_boundary - timedelta(days=1)),
                 CapabilityFact(GST_CAPABILITY, True, self.gst_boundary, None),
             )
         else:
             gst = (CapabilityFact(GST_CAPABILITY, True),)
-        return SellerProfile(SELLER_ID, SELLER_NAME, (*gst, CapabilityFact(SAFE_T_CAPABILITY, True)))
+        return SellerProfile(
+            SELLER_ID, SELLER_NAME, (*gst, CapabilityFact(SAFE_T_CAPABILITY, True))
+        )
 
     def build(self, out_dir: Path) -> Manifest:
         spec = self.spec
@@ -1205,7 +1213,9 @@ class _Builder:
         }
         totals: list[tuple[Cycle, Paise]] = []
         for cycle in self.cycles:
-            blocks = [b for plan in self.orders for b in plan.blocks if b.cycle_index == cycle.index]
+            blocks = [
+                b for plan in self.orders for b in plan.blocks if b.cycle_index == cycle.index
+            ]
             blocks.append(reserves[cycle.index])
             rendered = v2.render_settlement(
                 settlement_id=cycle.settlement_id,
@@ -1247,9 +1257,7 @@ class _Builder:
 
         bank_rows: list[tuple[str, str, str, str]] = []
         duplicate_rows: tuple[str, ...] = ()
-        duplicate_of = (
-            self.rng.choice(self.cycles) if spec.count(Scenario.DUPLICATE_UTR) else None
-        )
+        duplicate_of = self.rng.choice(self.cycles) if spec.count(Scenario.DUPLICATE_UTR) else None
         for cycle, total in totals:
             utr = f"UTIBN{self.rng.randrange(10**11):011d}"
             row = (
