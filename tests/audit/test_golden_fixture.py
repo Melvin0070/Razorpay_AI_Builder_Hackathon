@@ -17,7 +17,7 @@ from pathlib import Path
 
 from leakproof.audit import GENESIS_PREV_HASH, AuditLog, canonical_json, verify_chain
 from leakproof.contract import AuditAction, State
-from leakproof.types import AuditEntry
+from leakproof.types import AuditEntry, ClaimPack
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "audit"
 GOLDEN_PATH = FIXTURES_DIR / "golden.jsonl"
@@ -57,6 +57,33 @@ def test_golden_log_verifies_with_committed_packs_dir():
     result = verify_chain(GOLDEN_PATH, artifacts_root=ARTIFACTS_ROOT)
     assert result.ok, result.detail
     assert result.entries == 3
+
+
+def test_committed_pack_parses_as_a_real_claim_pack():
+    """C5: verify_chain's orphan-pack check only calls Path.is_file() on
+    artifact_path -- it has never actually parsed the committed pack as a
+    types.ClaimPack, so a placeholder JSON file missing required fields
+    (cited_rows_csv, recomputation_csv, state_before, audit_seq -- the shape
+    this fixture originally had) was inert today but would silently start
+    failing the day another lane asserts every committed pack parses. This
+    test is that assertion, run now rather than left for that day."""
+    raw = json.loads((FIXTURES_DIR / "packs" / "e-100.json").read_text(encoding="utf-8"))
+    pack = ClaimPack(
+        exception_id=raw["exception_id"],
+        path=raw["path"],
+        claim_text=raw["claim_text"],
+        cited_rows_csv=raw["cited_rows_csv"],
+        recomputation_csv=raw["recomputation_csv"],
+        state_before=State(raw["state_before"]),
+        audit_seq=raw["audit_seq"],
+        overridden=raw["overridden"],
+    )
+    # audit_seq/path/exception_id line up with the golden log's own seq-3
+    # approve entry, which names this exact artifact_path.
+    assert pack.audit_seq == 3
+    assert pack.path == "packs/e-100.json"
+    assert pack.exception_id == "e-100"
+    assert pack.state_before == State.CLAIM_READY
 
 
 def test_golden_hashes_match_independently_reimplemented_recipe():
