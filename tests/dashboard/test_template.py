@@ -39,7 +39,11 @@ from leakproof.types import (
 AS_OF = date(2026, 8, 28)
 COVERAGE = CoverageWindow(date(2026, 7, 1), date(2026, 8, 21))
 DECLARED = CoverageDeclaration(
-    categories=("home-kitchen",), valid_from=date(2026, 3, 1), valid_to=None
+    categories=("home-kitchen",),
+    valid_from=date(2026, 3, 1),
+    valid_to=None,
+    audited_kinds=(),
+    acknowledged_kinds=(),
 )
 
 
@@ -75,7 +79,10 @@ def _report(queue: tuple[TriagedFinding, ...], **overrides) -> BatchReport:
             below_materiality=0,
         ),
         match_rates=MatchRates(
-            total_orders=len(queue) or 1, matched=len(queue) or 1, class6_flagged=0, quarantined_rows=0
+            total_orders=len(queue) or 1,
+            matched=len(queue) or 1,
+            class6_flagged=0,
+            quarantined_rows=0,
         ),
         dispositions=DispositionCounts(quarantine=0, uncovered=0, out_of_window=0, config_error=0),
         rate_card_coverage=DECLARED,
@@ -115,35 +122,30 @@ def test_special_characters_in_finding_id_cannot_break_html_attributes():
     every onclick site (row selection, approve/reject) must keep a literal
     ``"``, ``'``, ``<`` or ``&`` from ever appearing unescaped inside an
     attribute value."""
-    hostile_line = 'set"o=1\' x&<>.txt:1'
-    finding = _finding(order_id='O"1\'<&', claimed_line_id=hostile_line, source_line_ids=(hostile_line,))
+    hostile_line = "set\"o=1' x&<>.txt:1"
+    finding = _finding(
+        order_id="O\"1'<&", claimed_line_id=hostile_line, source_line_ids=(hostile_line,)
+    )
     row = _triaged(finding)
     report = _report((row,))
 
     for html in (render(report, mode="static"), render(report, mode="served")):
-        assert 'onmouseover' not in html
-        assert '<script>alert' not in html
+        assert "onmouseover" not in html
+        assert "<script>alert" not in html
         # The row's onclick attribute, taken literally from the source text,
         # must contain no bare '"' -- if it did, this regex (which stops at
         # the first '"') would capture a truncated, wrong value instead of
         # the full escaped finding_id.
-        import re
-
         m = re.search(r'onclick="lpSelect\(\'([^"]*)\'\)"', html)
         assert m is not None
-        from leakproof.dashboard.format import file_by  # noqa: F401  (import cost check only)
-        from leakproof.dashboard.html_utils import esc, js_str
-
         assert m.group(1) == esc(js_str(finding.finding_id))
 
 
 def test_gate_button_onclick_escapes_hostile_finding_id():
-    import re
-
-    from leakproof.dashboard.html_utils import esc, js_str
-
     hostile_line = 'x".txt:1'
-    finding = _finding(order_id='O"2', claimed_line_id=hostile_line, source_line_ids=(hostile_line,))
+    finding = _finding(
+        order_id='O"2', claimed_line_id=hostile_line, source_line_ids=(hostile_line,)
+    )
     row = _triaged(finding)  # CLAIM_READY, no gate -> approve/reject buttons render
     report = _report((row,))
     served = render(report, mode="served")
@@ -178,8 +180,8 @@ def test_eligibility_checks_render_with_checkbox_and_unverified_tag():
     # verified citation) is not.
     failed_idx = html.index("Not an A-to-z Guarantee refund")
     passed_idx = html.index("Not a seller-issued refund")
-    assert 'rule unverified' in html[failed_idx : failed_idx + 200]
-    assert 'rule unverified' not in html[passed_idx : passed_idx + 100]
+    assert "rule unverified" in html[failed_idx : failed_idx + 200]
+    assert "rule unverified" not in html[passed_idx : passed_idx + 100]
 
 
 # --------------------------------------------------------------------------- #

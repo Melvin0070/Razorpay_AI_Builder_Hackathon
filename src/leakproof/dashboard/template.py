@@ -399,7 +399,7 @@ def _detail_pane(item: TriagedFinding, mode: str, *, is_default: bool) -> str:
 
 
 def _finding_subline(f: Finding) -> str:
-    """"Order X · SKU Y · Z", omitting a missing SKU or category (and its
+    """ "Order X · SKU Y · Z", omitting a missing SKU or category (and its
     separator) instead of leaving a dangling "SKU  · " -- what lane J's
     class-6 absence findings and orphan rows produce (finding 12)."""
     parts = [f"Order {esc(f.order_id)}"]
@@ -552,7 +552,7 @@ def _approved_block(item: TriagedFinding) -> str:
         f'<div class="row"><div class="k">claim text</div><div>{claim_text}</div></div>'
         f'<div class="row"><div class="k">cited rows</div>'
         f'<div class="mono">{len(finding.source_line_ids)} rows · '
-        f'{esc(_artifact_file(path, "cited_rows.csv"))}</div></div>'
+        f"{esc(_artifact_file(path, 'cited_rows.csv'))}</div></div>"
         f'<div class="row"><div class="k">recomputation</div>'
         f'<div class="mono">{esc(_artifact_file(path, "recomputation.csv"))}</div></div>'
         f'<div class="row"><div class="k">written to</div><div class="mono">{written_to}</div></div>'
@@ -682,9 +682,7 @@ def _boundary_unparsed(report: BatchReport) -> str:
         shown_reasons = {qr.reason for qr in reasons}
         same_reason = len(rest_reasons | shown_reasons) == 1
         suffix = ", same reason" if same_reason else ""
-        reason_lines += (
-            f'<div class="cite" style="color:var(--ink-3)">…{more} more{suffix}</div>'
-        )
+        reason_lines += f'<div class="cite" style="color:var(--ink-3)">…{more} more{suffix}</div>'
     hint = (
         f'<div class="conseq" style="margin-top:8px"><b>Likely cause:</b> {esc(d.hint)}</div>'
         if d.hint

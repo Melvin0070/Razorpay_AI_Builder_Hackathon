@@ -55,7 +55,9 @@ def _detail_pane_blocks(html: str) -> list[str]:
 
 
 _PANE_OR_SCRIPT_RE = re.compile(r'<div class="detailpane"|\n<script>')
-_HIDDEN_ATTR_RE = re.compile(r'(<div class="detailpane" data-fid="[^"]*" data-state="[^"]*") hidden>')
+_HIDDEN_ATTR_RE = re.compile(
+    r'(<div class="detailpane" data-fid="[^"]*" data-state="[^"]*") hidden>'
+)
 
 
 def _mask_default_selection(html: str) -> str:

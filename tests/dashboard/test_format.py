@@ -113,7 +113,9 @@ def test_override_label_is_total_and_raises_on_unlisted_combinations():
 
 
 @pytest.mark.parametrize("state,blocker,nc_reason,_label", OVERRIDE_TABLE_ROWS)
-def test_override_consequence_lead_never_calls_an_exclusion_missing(state, blocker, nc_reason, _label):
+def test_override_consequence_lead_never_calls_an_exclusion_missing(
+    state, blocker, nc_reason, _label
+):
     """rule and window-expired are exclusions, not missing documents -- their
     consequences text must not say "without" (finding 5)."""
     lead = override_consequence_lead(state, blocker, nc_reason)
