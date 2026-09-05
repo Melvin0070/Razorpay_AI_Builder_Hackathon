@@ -4,13 +4,21 @@ The corpus is data, under ``corpus/``, one JSON file per source document, so a
 rate can be re-read against its own page without touching Python. This module
 turns that data into ``RateRule`` records and answers the two seam questions:
 what does the corpus cover, and what does it say about one (kind, category,
-as_of, principal).
+as_of, band key).
 
 Two dispositions, never one (D17). Outside the declared coverage a miss is
 ``UNCOVERED``, a documented limitation. Inside it a miss is ``CONFIG_ERROR``,
 which ``gate.config_error_gate`` turns into a build failure naming category,
 kind, slab and ``as_of``, so a corpus typo can never masquerade as the
 three-category cap working as designed.
+
+**Slab bounds are not order totals.** Amazon bands each fee on its own figure,
+and the two banded kinds band on two different ones (``SlabBasis``). Feeding a
+row's ``Order.principal_paise`` to either one is wrong whenever the row is
+multi-unit or the seller charged shipping, and wrong by a whole band: three
+shirts at 400 rupees band as 40000 paise, not as the row's 120000. Every banded
+rule therefore carries the basis its bounds are read on, and the caller computes
+the band key.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +37,25 @@ from leakproof.types import Citation, CoverageDeclaration, LookupMiss, RateLooku
 COVERAGE_FILE = "coverage.json"
 
 _MONEY_FIELDS = ("percent_bp", "fixed_paise", "slab_min_paise", "slab_max_paise")
+
+
+class SlabBasis(StrEnum):
+    """The figure a banded rule's slab bounds are read on.
+
+    Amazon states each one on the page the bands come from, and they differ:
+    the referral-fee table bands on the price of one item, the closing-fee
+    table on what the buyer paid for it. ``types.RateRule`` gains this as a
+    typed field at the wave close; until then the loader carries it beside the
+    rule and the corpus states it per rule and in ``coverage.json``.
+    """
+
+    #: Referral fee: the item's own price, i.e. the row's principal divided by
+    #: its quantity. A three-unit row bands on one unit, never on the total.
+    UNIT_ITEM_PRICE = "unit-item-price"
+    #: Fixed closing fee: "item price that is paid by the buyer (including any
+    #: shipping or gift-wrap charges charged by the seller)", quoted from the
+    #: closing-fee section of the fee schedule.
+    BUYER_PAID_ITEM_PRICE = "buyer-paid-item-price"
 
 
 class CorpusError(ValueError):
@@ -75,7 +103,33 @@ def _parse_kind(value: str, *, where: str) -> LineKind:
         raise CorpusError(f"{where}: {value!r} is not a LineKind") from exc
 
 
-def _parse_rule(raw: dict[str, Any], *, source: Citation, where: str) -> RateRule:
+def _parse_slab_basis(raw: dict[str, Any], rule: RateRule, *, where: str) -> SlabBasis | None:
+    """Required on a banded rule, forbidden on an unbanded one.
+
+    Forbidden rather than ignored: a basis on a rule with no bounds would imply
+    a band that does not exist, and the fee GST, TCS and TDS rules ride on
+    whatever the fee or the supply was, not on a price band.
+    """
+    declared = raw.get("slab_basis")
+    banded = rule.slab_min_paise is not None or rule.slab_max_paise is not None
+    if not banded:
+        if declared is not None:
+            raise CorpusError(f"{where}: slab_basis on a rule with no slab bounds")
+        return None
+    if declared is None:
+        raise CorpusError(
+            f"{where}: a banded rule must name the slab_basis its bounds are read on "
+            f"({', '.join(b.value for b in SlabBasis)})"
+        )
+    try:
+        return SlabBasis(declared)
+    except ValueError as exc:
+        raise CorpusError(f"{where}: {declared!r} is not a slab basis") from exc
+
+
+def _parse_rule(
+    raw: dict[str, Any], *, source: Citation, where: str
+) -> tuple[RateRule, SlabBasis | None]:
     rule_id = raw.get("rule_id")
     if not rule_id:
         raise CorpusError(f"{where}: rule_id is required")
@@ -111,14 +165,14 @@ def _parse_rule(raw: dict[str, Any], *, source: Citation, where: str) -> RateRul
         raise CorpusError(f"{at}: an audited rule must carry percent_bp or fixed_paise")
     if not rule.audited and (rule.percent_bp is not None or rule.fixed_paise is not None):
         raise CorpusError(f"{at}: an acknowledged rule must carry no rate (ADR-0005)")
-    return rule
+    return rule, _parse_slab_basis(raw, rule, where=at)
 
 
-def _slab_contains(rule: RateRule, principal_paise: Paise) -> bool:
+def _slab_contains(rule: RateRule, band_key_paise: Paise) -> bool:
     """Slab bounds are inclusive on both ends; ``None`` is an open end."""
-    if rule.slab_min_paise is not None and principal_paise < rule.slab_min_paise:
+    if rule.slab_min_paise is not None and band_key_paise < rule.slab_min_paise:
         return False
-    return not (rule.slab_max_paise is not None and principal_paise > rule.slab_max_paise)
+    return not (rule.slab_max_paise is not None and band_key_paise > rule.slab_max_paise)
 
 
 def _slab_text(rule: RateRule) -> str:
@@ -132,19 +186,23 @@ class RateCardCorpus:
     """A loaded corpus. Implements ``types.RateCard``.
 
     ``lookup`` takes one argument the frozen Protocol does not name,
-    ``principal_paise``, because a fee slab is a function of the order
-    principal and the seam has no other way to select a band. It is optional so
-    the three-argument Protocol call still type-checks and still works for
-    every kind whose rule spans the whole principal range (fee GST, TCS, TDS,
-    every acknowledgement). Asking for a slabbed kind without a principal is a
-    caller bug and raises, rather than silently returning the lowest band: a
-    wrong band is a wrong rupee amount, and deterministic money does not guess.
-    An interface change request for the seam is in the lane report.
+    ``band_key_paise``, because a fee slab is a function of a price and the
+    seam has no other way to select a band. It is optional so the
+    three-argument Protocol call still type-checks and still works for every
+    kind whose rule spans the whole range (fee GST, TCS, TDS, every
+    acknowledgement). Asking for a banded kind without a band key is a caller
+    bug and raises ``SlabBandRequired``, rather than silently returning the
+    lowest band: a wrong band is a wrong rupee amount, and deterministic money
+    does not guess. An interface change request for the seam is in the lane
+    report.
     """
 
     rules: tuple[RateRule, ...]
     declaration: CoverageDeclaration
     source_path: Path
+    #: rule_id -> the figure that rule's bounds are read on. A side table only
+    #: until ``types.RateRule`` gains the field at the wave close.
+    slab_bases: tuple[tuple[str, SlabBasis], ...] = ()
 
     # ---------------------------------------------------------------- seam --
 
@@ -156,8 +214,20 @@ class RateCardCorpus:
         kind: LineKind,
         category_id: str | None,
         as_of: date,
-        principal_paise: Paise | None = None,
+        band_key_paise: Paise | None = None,
     ) -> RateLookup:
+        """The rule in force, or the miss that explains why there is none.
+
+        ``band_key_paise`` is the **band key**, not the order total: the figure
+        this kind's slab bounds are read on, which ``band_basis(kind)`` names
+        and ``SlabBasis`` defines. For ``COMMISSION`` that is one unit's item
+        price (``order.principal_paise // order.quantity``); for
+        ``FIXED_CLOSING_FEE`` it is what the buyer paid for the item, seller
+        shipping and gift wrap included. Passing a multi-unit row's principal
+        to the first, or an item price without seller shipping to the second,
+        selects a neighbouring band and produces a fee that is wrong by more
+        than the materiality floor.
+        """
         uncovered = self._coverage_miss(kind, category_id, as_of)
         if uncovered is not None:
             return uncovered
@@ -168,19 +238,19 @@ class RateCardCorpus:
                 kind,
                 category_id,
                 as_of,
-                principal_paise,
+                band_key_paise,
                 "no rule and no acknowledgement in the corpus",
             )
 
-        if principal_paise is None:
+        if band_key_paise is None:
             if len(candidates) == 1 and _is_open_slab(candidates[0]):
                 return candidates[0]
             raise ValueError(
                 f"{kind} for category {category_id!r} at {as_of.isoformat()} is priced in "
-                f"{len(candidates)} slabs; lookup needs principal_paise to choose one"
+                f"{len(candidates)} slabs; lookup needs band_key_paise to choose one"
             )
 
-        matches = [r for r in candidates if _slab_contains(r, principal_paise)]
+        matches = [r for r in candidates if _slab_contains(r, band_key_paise)]
         if len(matches) == 1:
             return matches[0]
         if not matches:
@@ -188,7 +258,7 @@ class RateCardCorpus:
                 kind,
                 category_id,
                 as_of,
-                principal_paise,
+                band_key_paise,
                 "slab gap: "
                 + ", ".join(f"{r.rule_id} {_slab_text(r)}" for r in candidates)
                 + " cover neither side of it",
@@ -197,7 +267,7 @@ class RateCardCorpus:
             kind,
             category_id,
             as_of,
-            principal_paise,
+            band_key_paise,
             "overlapping slabs: " + ", ".join(f"{r.rule_id} {_slab_text(r)}" for r in matches),
         )
 
@@ -214,6 +284,20 @@ class RateCardCorpus:
         if specific:
             return specific
         return tuple(r for r in in_force if r.category_id is None)
+
+    def slab_basis(self, rule_id: str) -> SlabBasis | None:
+        """The figure one rule's bounds are read on; None when it has none."""
+        return dict(self.slab_bases).get(rule_id)
+
+    def band_basis(self, kind: LineKind) -> SlabBasis | None:
+        """What a caller must compute to look this kind up, or None when the
+        kind is not banded and any band key does. The loader has already
+        checked that every banded rule of a kind agrees on it."""
+        bases = dict(self.slab_bases)
+        for rule in self.rules:
+            if rule.kind is kind and rule.rule_id in bases:
+                return bases[rule.rule_id]
+        return None
 
     @property
     def audited_kinds(self) -> tuple[LineKind, ...]:
@@ -260,10 +344,10 @@ class RateCardCorpus:
         kind: LineKind,
         category_id: str | None,
         as_of: date,
-        principal_paise: Paise | None,
+        band_key_paise: Paise | None,
         why: str,
     ) -> LookupMiss:
-        principal = "unspecified" if principal_paise is None else f"{principal_paise} paise"
+        band_key = "unspecified" if band_key_paise is None else f"{band_key_paise} paise"
         return LookupMiss(
             disposition=Disposition.CONFIG_ERROR,
             kind=kind,
@@ -271,7 +355,7 @@ class RateCardCorpus:
             as_of=as_of,
             detail=(
                 f"category={category_id or 'marketplace-wide'} kind={kind.value} "
-                f"principal={principal} as_of={as_of.isoformat()}: {why}"
+                f"band_key={band_key} as_of={as_of.isoformat()}: {why}"
             ),
         )
 
@@ -307,6 +391,7 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
         if field not in coverage_raw:
             raise CorpusError(f"{COVERAGE_FILE}: {field!r} is required")
     rules: list[RateRule] = []
+    bases: dict[str, SlabBasis] = {}
     seen: dict[str, str] = {}
     for file in sorted(root.glob("*.json")):
         if file.name == COVERAGE_FILE:
@@ -316,13 +401,15 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
             raise CorpusError(f"{file.name}: every rule document needs a 'source' citation (D14)")
         source = _parse_citation(doc["source"], where=file.name)
         for raw in doc.get("rules", ()):
-            rule = _parse_rule(raw, source=source, where=file.name)
+            rule, basis = _parse_rule(raw, source=source, where=file.name)
             if rule.rule_id in seen:
                 raise CorpusError(
                     f"duplicate rule_id {rule.rule_id!r} in {file.name} and {seen[rule.rule_id]}"
                 )
             seen[rule.rule_id] = file.name
             rules.append(rule)
+            if basis is not None:
+                bases[rule.rule_id] = basis
 
     if not rules:
         raise CorpusError(f"corpus at {root} declares no rules")
@@ -347,7 +434,55 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
             "a kind is either audited or acknowledged, never both: "
             + ", ".join(sorted(k.value for k in overlap))
         )
-    return RateCardCorpus(rules=ordered, declaration=declaration, source_path=root)
+    _check_slab_bases(ordered, bases, coverage_raw)
+    return RateCardCorpus(
+        rules=ordered,
+        declaration=declaration,
+        source_path=root,
+        slab_bases=tuple(sorted(bases.items())),
+    )
+
+
+def _check_slab_bases(
+    rules: tuple[RateRule, ...], bases: dict[str, SlabBasis], coverage_raw: dict[str, Any]
+) -> None:
+    """One basis per banded kind, and the same one ``coverage.json`` declares.
+
+    The per-rule field is what a reader of a rule document sees; the coverage
+    block is what the dashboard shows and what a caller reads before computing
+    a band key. Two statements of the same fact only help if they are checked
+    against each other.
+    """
+    per_kind: dict[LineKind, SlabBasis] = {}
+    for rule in rules:
+        basis = bases.get(rule.rule_id)
+        if basis is None:
+            continue
+        held = per_kind.setdefault(rule.kind, basis)
+        if held is not basis:
+            raise CorpusError(
+                f"{rule.kind.value} bands on {held.value} and on {basis.value} "
+                f"({rule.rule_id}); one kind is read on one figure"
+            )
+    declared_raw = coverage_raw.get("slab_bases")
+    if declared_raw is None and not per_kind:
+        return
+    if declared_raw is None:
+        raise CorpusError(
+            f"{COVERAGE_FILE}: 'slab_bases' is required; name the figure each banded "
+            "kind's bounds are read on"
+        )
+    try:
+        declared = {LineKind(k): SlabBasis(v) for k, v in declared_raw.items()}
+    except ValueError as exc:
+        raise CorpusError(f"{COVERAGE_FILE}.slab_bases: {exc}") from exc
+    if declared != per_kind:
+        raise CorpusError(
+            f"{COVERAGE_FILE}.slab_bases declares "
+            + (", ".join(f"{k.value}={v.value}" for k, v in sorted(declared.items())) or "nothing")
+            + " but the rules band "
+            + (", ".join(f"{k.value}={v.value}" for k, v in sorted(per_kind.items())) or "nothing")
+        )
 
 
 def _kinds(rules: tuple[RateRule, ...], *, audited: bool) -> tuple[LineKind, ...]:

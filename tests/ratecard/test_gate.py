@@ -34,9 +34,9 @@ def test_the_gate_result_names_the_declared_coverage():
 
 def test_the_sweep_probes_both_sides_of_every_slab_bound(card):
     """A regression guard on the sweep itself: shrinking it must fail here."""
-    from leakproof.ratecard.gate import _probe_principals
+    from leakproof.ratecard.gate import _probe_band_keys
 
-    probes = _probe_principals(card, LineKind.FIXED_CLOSING_FEE, "apparel", INSIDE)
+    probes = _probe_band_keys(card, LineKind.FIXED_CLOSING_FEE, "apparel", INSIDE)
     for bound in (30_000, 50_000, 100_000):
         assert {bound - 1, bound, bound + 1} <= set(probes), bound
 

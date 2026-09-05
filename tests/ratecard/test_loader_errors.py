@@ -33,6 +33,19 @@ RULE = {
 }
 
 
+#: A banded rule and the coverage block that must accompany one.
+BANDED = {
+    **RULE,
+    "rule_id": "b1",
+    "kind": "commission",
+    "category_id": "apparel",
+    "percent_bp": 2100,
+    "slab_basis": "unit-item-price",
+    "slab_min_paise": 100001,
+}
+BANDED_COVERAGE = {**COVERAGE, "slab_bases": {"commission": "unit-item-price"}}
+
+
 def _write(root, coverage=COVERAGE, docs=None):
     root.mkdir(parents=True, exist_ok=True)
     (root / "coverage.json").write_text(json.dumps(coverage), encoding="utf-8")
@@ -109,4 +122,69 @@ def test_a_backwards_validity_window_is_rejected(tmp_path):
 def test_a_corpus_with_no_rules_is_rejected(tmp_path):
     root = _write(tmp_path / "c", docs={"rules.json": {"source": SOURCE, "rules": []}})
     with pytest.raises(CorpusError, match="no rules"):
+        load_rate_card(root)
+
+
+def test_a_banded_rule_without_a_slab_basis_is_rejected(tmp_path):
+    """The bound alone does not say what figure it is read on, and the two
+    banded kinds are read on two different ones."""
+    rule = {k: v for k, v in BANDED.items() if k != "slab_basis"}
+    root = _write(
+        tmp_path / "c",
+        coverage=BANDED_COVERAGE,
+        docs={"r.json": {"source": SOURCE, "rules": [rule]}},
+    )
+    with pytest.raises(CorpusError, match="must name the slab_basis"):
+        load_rate_card(root)
+
+
+def test_an_unknown_slab_basis_is_rejected(tmp_path):
+    rule = {**BANDED, "slab_basis": "order-principal"}
+    root = _write(
+        tmp_path / "c",
+        coverage=BANDED_COVERAGE,
+        docs={"r.json": {"source": SOURCE, "rules": [rule]}},
+    )
+    with pytest.raises(CorpusError, match="not a slab basis"):
+        load_rate_card(root)
+
+
+def test_a_slab_basis_on_an_unbanded_rule_is_rejected(tmp_path):
+    """It would imply a band that does not exist: fee GST rides on the fee."""
+    rule = {**RULE, "slab_basis": "unit-item-price"}
+    root = _write(tmp_path / "c", docs={"r.json": {"source": SOURCE, "rules": [rule]}})
+    with pytest.raises(CorpusError, match="no slab bounds"):
+        load_rate_card(root)
+
+
+def test_one_kind_banded_on_two_different_figures_is_rejected(tmp_path):
+    rules = [
+        BANDED,
+        {**BANDED, "rule_id": "b2", "slab_basis": "buyer-paid-item-price", "slab_min_paise": 1},
+    ]
+    root = _write(
+        tmp_path / "c",
+        coverage=BANDED_COVERAGE,
+        docs={"r.json": {"source": SOURCE, "rules": rules}},
+    )
+    with pytest.raises(CorpusError, match="one kind is read on one figure"):
+        load_rate_card(root)
+
+
+def test_banded_rules_with_no_declared_basis_in_coverage_are_rejected(tmp_path):
+    root = _write(tmp_path / "c", docs={"r.json": {"source": SOURCE, "rules": [BANDED]}})
+    with pytest.raises(CorpusError, match="'slab_bases' is required"):
+        load_rate_card(root)
+
+
+def test_a_coverage_declaration_that_contradicts_the_rules_is_rejected(tmp_path):
+    """Two statements of one fact only help when they are checked against each
+    other; otherwise the dashboard can show a basis the rules do not use."""
+    coverage = {**COVERAGE, "slab_bases": {"commission": "buyer-paid-item-price"}}
+    root = _write(
+        tmp_path / "c",
+        coverage=coverage,
+        docs={"r.json": {"source": SOURCE, "rules": [BANDED]}},
+    )
+    with pytest.raises(CorpusError, match="slab_bases declares"):
         load_rate_card(root)

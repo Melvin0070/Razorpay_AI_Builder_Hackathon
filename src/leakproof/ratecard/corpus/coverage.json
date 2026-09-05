@@ -7,6 +7,11 @@
   ],
   "valid_from": "2026-03-16",
   "valid_to": null,
+  "slab_bases": {
+    "commission": "unit-item-price",
+    "fixed-closing-fee": "buyer-paid-item-price"
+  },
+  "slab_bases_note": "The figure each banded kind's slab bounds are read on, stated here and on every banded rule, and cross-checked at load. The referral-fee table bands on the price of one item (\"item price\"), so the band key is the row principal divided by its quantity: three shirts at 400 rupees band as 40000 paise, not as the row's 120000, and banding the row total would move every multi-unit apparel order from the 0% band to the 21% one. The closing-fee section states its own basis in the page's words -- \"item price that is paid by the buyer (including any shipping or gift-wrap charges charged by the seller)\" -- so an item at 960 rupees with 60 rupees of seller shipping bands above 1000, not below it. lookup() takes the band key, never the order total.",
   "note": "D17. The corpus declares coverage from 16 March 2026, the first date on which every audited kind can be priced for all three declared categories: the referral-fee schedule and the Fulfilment-Centre closing-fee table both take effect that day. Rules with earlier windows (the superseded referral bands, the TCS and TDS rate history) are encoded and cited as history; a lookup outside the window above is UNCOVERED, never CONFIG_ERROR.",
   "fulfilment_channel": "Fulfilment center (excluding Seller Flex)",
   "fulfilment_channel_note": "Amazon prices the fixed closing fee per fulfilment channel (Fulfilment Centre, Easy Ship, Self Ship, Seller Flex) and the settlement file does not name the channel on the line. The corpus encodes the Fulfilment-Centre schedule and declares that choice here rather than implying it.",

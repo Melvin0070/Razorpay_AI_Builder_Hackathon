@@ -120,7 +120,7 @@ def test_a_known_kind_with_no_rule_is_a_config_error_not_a_silent_pass(card):
 
 
 def test_a_slabbed_kind_without_a_principal_raises_rather_than_guessing(card):
-    with pytest.raises(ValueError, match="principal_paise"):
+    with pytest.raises(ValueError, match="band_key_paise"):
         card.lookup(LineKind.COMMISSION, APPAREL, INSIDE)
 
 

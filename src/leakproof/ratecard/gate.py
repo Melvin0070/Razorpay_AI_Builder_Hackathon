@@ -68,7 +68,7 @@ def sweep(card: RateCardCorpus) -> tuple[LookupMiss, ...]:
     for as_of in _probe_dates(card):
         for category_id in card.coverage().categories:
             for kind in kinds:
-                for principal in _probe_principals(card, kind, category_id, as_of):
+                for principal in _probe_band_keys(card, kind, category_id, as_of):
                     result = card.lookup(kind, category_id, as_of, principal)
                     if isinstance(result, LookupMiss) and (
                         result.disposition is Disposition.CONFIG_ERROR
@@ -97,7 +97,7 @@ def _probe_dates(card: RateCardCorpus) -> tuple[date, ...]:
     return tuple(sorted(inside))
 
 
-def _probe_principals(
+def _probe_band_keys(
     card: RateCardCorpus, kind: LineKind, category_id: str | None, as_of: date
 ) -> tuple[Paise, ...]:
     """Both sides of every slab bound the corpus declares for this cell."""
