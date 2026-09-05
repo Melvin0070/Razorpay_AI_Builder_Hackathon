@@ -257,6 +257,24 @@ def test_approved_fixture_row_renders_frame_3_block(static_html, served_html):
         assert "claims/E-042/" in html
 
 
+def test_atoz_excluded_row_shows_the_failed_rule_check_and_unverified_tag(static_html):
+    """finding 3: the fixture's A-to-z-excluded row (order 403-6690123-7208814,
+    step 1, SAFET-01) is the one the finding names directly -- its why-line
+    reads "excluded by rule" but the eligibility check that disqualified it
+    was, before this fix, never rendered at all. Both of its eligibility
+    checks carry an unverified citation in the fixture."""
+    fid = "403-6690123-7208814|5|settlement_2026-08-07.txt:455"
+    start = static_html.index(f'detailpane" data-fid="{fid}"')
+    end = static_html.index('</div></div><div class="sec"><div class="h">Drafted claim', start)
+    pane = static_html[start:end]
+    assert '<span class="miss">Not an A-to-z Guarantee refund</span>' in pane
+    assert '<span class="ok">Not a seller-issued refund</span>' in pane
+    failed_idx = pane.index("Not an A-to-z Guarantee refund")
+    passed_idx = pane.index("Not a seller-issued refund")
+    assert "rule unverified" in pane[failed_idx : failed_idx + 120]
+    assert "rule unverified" in pane[passed_idx : passed_idx + 120]
+
+
 def test_no_external_script_or_link_urls(static_html, served_html):
     assert not _LINK_URL_RE.search(static_html)
     assert not _LINK_URL_RE.search(served_html)
