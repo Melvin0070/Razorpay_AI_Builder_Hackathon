@@ -24,9 +24,8 @@ the band key.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -38,31 +37,13 @@ from leakproof.types import (
     RateCard,
     RateLookup,
     RateRule,
+    SlabBasis,
 )
 
 #: Files under ``corpus/`` are rule documents, except this one.
 COVERAGE_FILE = "coverage.json"
 
 _MONEY_FIELDS = ("percent_bp", "fixed_paise", "slab_min_paise", "slab_max_paise")
-
-
-class SlabBasis(StrEnum):
-    """The figure a banded rule's slab bounds are read on.
-
-    Amazon states each one on the page the bands come from, and they differ:
-    the referral-fee table bands on the price of one item, the closing-fee
-    table on what the buyer paid for it. ``types.RateRule`` gains this as a
-    typed field at the wave close; until then the loader carries it beside the
-    rule and the corpus states it per rule and in ``coverage.json``.
-    """
-
-    #: Referral fee: the item's own price, i.e. the row's principal divided by
-    #: its quantity. A three-unit row bands on one unit, never on the total.
-    UNIT_ITEM_PRICE = "unit-item-price"
-    #: Fixed closing fee: "item price that is paid by the buyer (including any
-    #: shipping or gift-wrap charges charged by the seller)", quoted from the
-    #: closing-fee section of the fee schedule.
-    BUYER_PAID_ITEM_PRICE = "buyer-paid-item-price"
 
 
 class CorpusError(ValueError):
@@ -204,7 +185,11 @@ def _parse_rule(
         raise CorpusError(f"{at}: an audited rule must carry percent_bp or fixed_paise")
     if not rule.audited and (rule.percent_bp is not None or rule.fixed_paise is not None):
         raise CorpusError(f"{at}: an acknowledged rule must carry no rate (ADR-0005)")
-    return rule, _parse_slab_basis(raw, rule, where=at)
+    basis = _parse_slab_basis(raw, rule, where=at)
+    # The side table below stays: the corpus declares each basis twice, per
+    # rule and in coverage.json, and _check_slab_bases reads the two against
+    # each other. The field is what a consumer holding only the seam reads.
+    return replace(rule, slab_basis=basis), basis
 
 
 def _slab_contains(rule: RateRule, band_key_paise: Paise) -> bool:
@@ -224,23 +209,24 @@ def _slab_text(rule: RateRule) -> str:
 class RateCardCorpus:
     """A loaded corpus. Implements ``types.RateCard``.
 
-    ``lookup`` takes one argument the frozen Protocol does not name,
-    ``band_key_paise``, because a fee slab is a function of a price and the
-    seam has no other way to select a band. It is optional so the
-    three-argument Protocol call still type-checks and still works for every
+    ``lookup`` takes ``band_key_paise`` because a fee slab is a function of a
+    price and the seam has no other way to select a band; the Protocol carries
+    it as of the Wave 1 close. It is optional so the three-argument call still
+    type-checks and still works for every
     kind whose rule spans the whole range (fee GST, TCS, TDS, every
     acknowledgement). Asking for a banded kind without a band key is a caller
     bug and raises ``SlabBandRequiredError``, rather than silently returning the
     lowest band: a wrong band is a wrong rupee amount, and deterministic money
-    does not guess. An interface change request for the seam is in the lane
-    report.
+    does not guess.
     """
 
     rules: tuple[RateRule, ...]
     declaration: CoverageDeclaration
     source_path: Path
-    #: rule_id -> the figure that rule's bounds are read on. A side table only
-    #: until ``types.RateRule`` gains the field at the wave close.
+    #: rule_id -> the figure that rule's bounds are read on. Mirrors
+    #: ``RateRule.slab_basis`` (promoted to the seam at the Wave 1 close) and
+    #: is kept because ``band_basis`` and the coverage cross-check read it as a
+    #: table rather than walking the rules.
     slab_bases: tuple[tuple[str, SlabBasis], ...] = ()
 
     # ---------------------------------------------------------------- seam --

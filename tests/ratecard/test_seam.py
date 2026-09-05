@@ -24,10 +24,15 @@ def _protocol_methods() -> dict[str, object]:
     }
 
 
-def test_the_protocol_still_has_the_two_methods_the_corpus_answers():
-    """A guard on the guard: if the seam grows a third method, the conformance
-    test below must be taught about it rather than passing vacuously."""
-    assert set(_protocol_methods()) == {"lookup", "coverage"}
+def test_the_protocol_still_has_the_three_methods_the_corpus_answers():
+    """A guard on the guard: if the seam grows another method, the conformance
+    test below must be taught about it rather than passing vacuously.
+
+    ``band_basis`` joined the seam at the Wave 1 close, with ``band_key_paise``
+    on ``lookup``: a detector holding only the seam must be able to ask what
+    figure a band is read on, or it hard-codes the answer.
+    """
+    assert set(_protocol_methods()) == {"lookup", "coverage", "band_basis"}
 
 
 def test_the_corpus_implements_every_protocol_method_with_a_compatible_signature(card):
@@ -37,9 +42,8 @@ def test_the_corpus_implements_every_protocol_method_with_a_compatible_signature
         want = [p for p in inspect.signature(declared).parameters.values() if p.name != "self"]
         got = [p for p in inspect.signature(impl).parameters.values() if p.name != "self"]
         assert [p.name for p in got[: len(want)]] == [p.name for p in want], name
-        # lookup takes band_key_paise, which the frozen Protocol does not name.
-        # Extra parameters are fine; extra REQUIRED ones would break every
-        # caller holding the seam.
+        # Extra parameters beyond the Protocol's are fine; extra REQUIRED ones
+        # would break every caller holding the seam.
         for extra in got[len(want) :]:
             assert extra.default is not inspect.Parameter.empty, f"{name}: {extra.name}"
 
