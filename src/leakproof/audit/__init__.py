@@ -46,6 +46,17 @@ appended out of turn would make them disagree, and ``verify_chain`` — not
 ``append`` — is what catches a reorder like that, by recomputing the whole
 chain rather than trusting whichever entry happens to be last on disk.
 
+``append`` only ever refuses to continue past an *unreadable tail*: it calls
+``head()`` to find the current ``seq``/``prev_hash``, and if the current last
+line cannot be parsed, there is no correct pair to continue from, so it
+raises rather than guessing. A corrupt line in the *middle* of the file is a
+different story — ``head()`` never reads it (it only reads the tail; see
+``_read_tail_line_fast``), so ``append`` keeps landing new, individually
+well-formed entries at the next ``seq`` while ``verify_chain``/the gate stay
+red the whole time, because they scan every line from the start. This is
+correct and intended, not a bug: the gate is what a human is meant to be
+watching, not a reason to make every append pay for a full-file scan.
+
 SECURITY.md is explicit that this makes the log tamper-*evident*, not
 tamper-*proof*: anyone with write access to the file can rewrite an entry and
 re-chain everything after it by hand. Verification catches an edit that was
@@ -64,6 +75,13 @@ bad line or bad path. They raise the single typed
 is reported as a normal, non-ok :class:`ChainVerification`/``GateResult``
 naming the physical line and why, so a corrupt log fails the gate rather than
 crashing ``make verify``.
+
+Orphan-pack resolution (``_resolve_artifact``, used when ``verify_chain`` is
+given ``artifacts_root``) rejects a path that escapes ``artifacts_root`` via
+``Path.resolve()``, which follows symlinks — so a symlink placed *inside*
+``artifacts_root`` that points *outside* it is rejected too, not just a
+literal ``..`` segment. A deployment that symlinks its packs directory
+somewhere else will fail the gate rather than silently passing.
 """
 
 from __future__ import annotations
@@ -344,7 +362,15 @@ class AuditLog:
     """Append-only JSONL log at ``path``. Every method re-reads ``path`` from
     disk rather than caching — the file is the only state, which is what
     makes reopening a log (a new ``AuditLog(path)`` instance) pick up exactly
-    where the last process left off."""
+    where the last process left off.
+
+    ``append`` only ever refuses to continue past an *unreadable tail* — a
+    corrupt line elsewhere in the file does not stop it, since it never reads
+    beyond the tail to find its next ``seq``/``prev_hash``. See the module
+    docstring's paragraph on this for why that is correct rather than a gap:
+    ``verify_chain``/the gate (which scan every line) are what catch
+    middle-of-file corruption, and they stay red for as long as it is there.
+    """
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -429,14 +455,22 @@ class AuditLog:
         return tuple(out)
 
     def head(self) -> AuditEntry | None:
-        """The last entry, or ``None`` for an empty/absent log. Reads only
-        the tail of the file (see ``_read_tail_line_fast``) rather than
-        parsing every earlier line, so the cost of an append is independent
-        of how many entries already exist. Falls back to the accurate,
-        fully-parsed ``entries()`` (which raises :class:`AuditLogCorruptError`
-        naming the exact line) whenever the fast tail read cannot confidently
-        parse a complete last line — that fallback only runs on the rare
-        corrupt-log path, never on a healthy append."""
+        """The last entry, or ``None`` for an empty/absent log. Reads a
+        bounded first window from the end of the file (see
+        ``_read_tail_line_fast`` — up to 64 KiB, ``min(chunk_size, size)``)
+        to recover what is typically a ~300-500 byte line, rather than
+        parsing every earlier line, so the cost is constant, independent of
+        how many entries already exist — NOT literally "read only the last
+        line": it reads a window sized to comfortably contain one, not a
+        minimal exact-line read. Falls back to the accurate, fully-parsed
+        ``entries()`` (which raises :class:`AuditLogCorruptError` naming the
+        exact line) whenever the fast tail read cannot confidently parse a
+        complete last line — that fallback only runs on the rare corrupt-log
+        path, never on a healthy append. Only a corrupt *tail* reaches this
+        fallback; ``append`` building on a ``head()`` that raises is why it
+        refuses to continue only past unreadable-tail corruption, never past
+        corruption earlier in the file (see the module and class
+        docstrings)."""
         if not self.path.exists() or self.path.stat().st_size == 0:
             return None
         tail = _read_tail_line_fast(self.path)
