@@ -5,9 +5,9 @@ over a few thousand entries."""
 
 from __future__ import annotations
 
-import time
+from pathlib import Path
 
-from leakproof.audit import AuditLog, _read_tail_line_fast
+from leakproof.audit import _DEFAULT_TAIL_CHUNK_SIZE, AuditLog, _read_tail_line_fast
 from tests.audit.conftest import append_sample
 
 
@@ -57,28 +57,93 @@ def test_head_matches_full_scan_after_many_appends(tmp_path):
     assert log.head() == last
 
 
-def test_append_cost_does_not_blow_up_quadratically(tmp_path):
-    """Not a strict benchmark (CI machines vary), just a guard against the
-    reintroduction of O(n^2) append: doubling the entry count should not
-    multiply the time for the second half by anywhere near the entry count."""
+class _CountingFile:
+    """Wraps a binary file object opened for reading and accumulates every
+    byte handed back by ``.read()``/iteration into ``counter["bytes"]`` —
+    used below to measure exactly how much I/O ``head()``'s fast-tail path
+    performs per ``append()`` call, independent of wall-clock noise (C3).
+
+    Also iterable (delegating to the wrapped file's own line iteration,
+    counting each line's bytes): if a full-scan regression ever made
+    ``head()`` fall back to ``entries()`` (which iterates the file rather
+    than calling ``.read()``), this wrapper still counts those bytes instead
+    of raising ``TypeError: not iterable`` and masking the real signal this
+    test exists to give — a bound violation, not a crash."""
+
+    def __init__(self, fh: object, counter: dict[str, int]) -> None:
+        self._fh = fh
+        self._counter = counter
+
+    def read(self, *args: object, **kwargs: object) -> bytes:
+        data = self._fh.read(*args, **kwargs)  # type: ignore[attr-defined]
+        self._counter["bytes"] += len(data)
+        return data
+
+    def __iter__(self) -> _CountingFile:
+        return self
+
+    def __next__(self) -> bytes:
+        line = next(self._fh)  # type: ignore[call-overload]
+        self._counter["bytes"] += len(line)
+        return line
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._fh, name)
+
+    def __enter__(self) -> _CountingFile:
+        return self
+
+    def __exit__(self, *exc: object) -> object:
+        return self._fh.__exit__(*exc)  # type: ignore[attr-defined]
+
+
+def test_append_reads_bounded_bytes_per_call_independent_of_log_size(tmp_path, monkeypatch):
+    """C3: this test used to assert a wall-clock bound
+    (``second_half < first_half * 3 + 0.5``) over 1200 real appends and
+    fsyncs. That carries no information when it passes -- wall-clock timing
+    can look linear for reasons that have nothing to do with whether
+    ``head()`` actually reads a bounded number of bytes -- and can flake on
+    a loaded CI runner. Replaced with a deterministic bound on the thing
+    that actually matters: bytes read from disk per ``append()`` call via
+    ``head()``'s fast-tail path (``_read_tail_line_fast``, opened in "rb"),
+    measured through a counting wrapper around ``Path.open``. This is the
+    guard that actually catches the O(n^2) full-scan regression the
+    original test meant to detect: if ``head()`` ever fell back to parsing
+    the whole (growing) file, bytes-per-append would grow with ``n`` and
+    blow straight through the bound below, at any n, deterministically."""
     path = tmp_path / "audit.jsonl"
     log = AuditLog(path)
-    n = 600
 
-    start = time.perf_counter()
-    for i in range(n):
-        append_sample(log, f"2026-08-21T00:00:00.{i:06d}Z")
-    first_half = time.perf_counter() - start
+    counter = {"bytes": 0}
+    real_open = Path.open
 
-    start = time.perf_counter()
-    for i in range(n, 2 * n):
-        append_sample(log, f"2026-08-21T00:00:00.{i:06d}Z")
-    second_half = time.perf_counter() - start
+    def counting_open(self: Path, mode: str = "r", *args: object, **kwargs: object) -> object:
+        fh = real_open(self, mode, *args, **kwargs)
+        if self == path and mode == "rb":
+            return _CountingFile(fh, counter)
+        return fh
 
-    # O(n^2) behaviour would make the second (equal-sized, but over a log
-    # twice as long) batch take roughly 3x the first; a linear cost keeps it
-    # close to 1x. Generous slack for CI noise.
-    assert second_half < first_half * 3 + 0.5, (
-        f"append cost looks superlinear: first_half={first_half:.3f}s "
-        f"second_half={second_half:.3f}s"
-    )
+    monkeypatch.setattr(Path, "open", counting_open)
+
+    def bytes_per_append(count: int) -> float:
+        counter["bytes"] = 0
+        for i in range(count):
+            append_sample(log, f"2026-08-21T00:00:00.{i:06d}Z")
+        return counter["bytes"] / count
+
+    # The reviewer measured 34880/50208/57873 bytes/append at n=200/400/800
+    # against the old fixed-64KiB-window implementation, converging upward
+    # on the chunk-size ceiling as more appends land once the file exceeds
+    # it -- exactly the shape a bound independent of n needs to catch.
+    n = 200
+    per_n = bytes_per_append(n)  # log grows from 0 to n entries
+    per_4n = bytes_per_append(3 * n)  # log grows from n to 4n entries
+
+    # A generous over-estimate of one JSONL line in this fixture (actual
+    # lines are on the order of 150-200 bytes); the bound only needs to
+    # reject "read a chunk_size window regardless of line size" or worse
+    # ("read the whole file"), not pin the exact byte count.
+    max_line_len = 512
+    bound = _DEFAULT_TAIL_CHUNK_SIZE + max_line_len
+    assert per_n <= bound, f"bytes/append at n={n} exceeded bound: {per_n} > {bound}"
+    assert per_4n <= bound, f"bytes/append at n={4 * n} exceeded bound: {per_4n} > {bound}"
