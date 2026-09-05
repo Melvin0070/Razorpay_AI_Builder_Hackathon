@@ -90,3 +90,60 @@ def test_non_utf8_profile_raises_profile_error_naming_the_file(tmp_path):
         load_profile(path)
 
     assert str(path) in str(exc_info.value)
+
+
+# --------------------------------------------------------------------------- #
+# G3: valid JSON that is not the expected shape must still raise ProfileError
+# naming the file -- not a bare AttributeError/TypeError, which is exactly
+# what this finding was filed to prevent.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("content", ["[]", '"x"', "null", "42"])
+def test_non_object_top_level_raises_profile_error_naming_the_file(tmp_path, content):
+    path = tmp_path / "notobject.json"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+
+
+def test_non_array_capabilities_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "badcaps.json"
+    path.write_text(
+        '{"seller_id": "SELLER-001", "display_name": "Test Seller", "capabilities": "oops"}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+    assert "capabilities" in str(exc_info.value)
+
+
+def test_non_object_capability_entry_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "badcapentry.json"
+    path.write_text(
+        '{"seller_id": "SELLER-001", "display_name": "Test Seller", '
+        '"capabilities": ["gst_registered"]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+
+
+def test_non_string_seller_id_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "badsellerid.json"
+    path.write_text('{"seller_id": 123, "display_name": "Test Seller"}', encoding="utf-8")
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+    assert "seller_id" in str(exc_info.value)
