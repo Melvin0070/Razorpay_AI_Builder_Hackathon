@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from leakproof.ingest.profile import load_profile
+import pytest
+
+from leakproof.ingest.profile import ProfileError, load_profile
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "ingest"
 
@@ -35,3 +37,56 @@ def test_capability_windows_round_trip():
     assert profile.capability("safe_t_enrolled", date(2025, 12, 1)) is False
     assert profile.capability("safe_t_enrolled", date(2026, 6, 1)) is None
     assert profile.capability("unknown_capability", date(2026, 1, 1)) is None
+
+
+# --------------------------------------------------------------------------- #
+# S13: every content-level fault raises the single ProfileError, naming the
+# file and the cause -- not three unrelated exception types.
+# --------------------------------------------------------------------------- #
+
+
+def test_invalid_json_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "broken.json"
+    path.write_text("{not valid json", encoding="utf-8")
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+
+
+def test_missing_required_key_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "nokey.json"
+    path.write_text('{"seller_id": "SELLER-001"}', encoding="utf-8")
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+    assert "display_name" in str(exc_info.value)
+
+
+def test_bad_capability_date_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "baddate.json"
+    path.write_text(
+        '{"seller_id": "SELLER-001", "display_name": "Test Seller", '
+        '"capabilities": [{"name": "gst_registered", "holds": true, '
+        '"valid_from": "not-a-date"}]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
+    assert "not-a-date" in str(exc_info.value)
+
+
+def test_non_utf8_profile_raises_profile_error_naming_the_file(tmp_path):
+    path = tmp_path / "badutf8.json"
+    path.write_bytes(b'{"seller_id": "Caf\xe9"}')
+
+    with pytest.raises(ProfileError) as exc_info:
+        load_profile(path)
+
+    assert str(path) in str(exc_info.value)
