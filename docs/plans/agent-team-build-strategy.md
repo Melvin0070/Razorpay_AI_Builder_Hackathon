@@ -114,7 +114,7 @@ src/leakproof/
   ingest/        D   parsers + quarantine
   ratecard/      C   corpus + declared coverage + lookup
   generator/     B   synthetic batches + manifest (never imports ratecard/)
-  labels/        F   claimability labels (frozen) + holdout/ 25 cases
+  labels/        F   claimability labels (frozen) + holdout/ 26 cases
   audit/         E   hash-chained log
   ledger/        H   fold + coverage window + tiebreak + exact matcher
   bankleg/       I   payout ↔ UTR
