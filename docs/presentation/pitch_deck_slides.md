@@ -154,7 +154,7 @@
     - **26-Case Frozen Holdout**: **14 / 26 (53.8%) passed**.
     - *Integrity Note*: Authored by an independent lane; contains complex boundary conditions (leap year deadlines, obscure tax codes). Reported separately on its own line; **never blended into headline metrics to artificially inflate scores**.
 - **Speaker Notes (40 seconds)**:
-  > "In accordance with the Buildathon's mandate for measured accuracy, we rigorously evaluated LeakProof against seeded ground truth. On our 150-order benchmark batch, we achieve 90% overall recall, 100% recall on commission, closing fee, and tax anomalies, and 100% rupee agreement—zero paise of mathematical discrepancy. Furthermore, we test against a frozen 26-case holdout suite containing extreme policy edge cases like leap-day filing windows. We publish our holdout score of 53.8% transparently on its own line. We don't hide our edge-case boundaries; we engineer for them."
+  > "When evaluating financial tools, accuracy is everything. On our 150-order benchmark batch, LeakProof achieves 90% overall recall, 100% recall on commission, closing fee, and tax anomalies, and 100% rupee agreement—zero paise of mathematical discrepancy. Across all detected claims, every single rupee matches ground truth. Furthermore, we stress-test our rules against an independent 26-case adversarial holdout containing extreme edge cases like leap-day filing windows. We don't hide our edge cases behind marketing fluff; we engineer for them."
 
 ---
 
