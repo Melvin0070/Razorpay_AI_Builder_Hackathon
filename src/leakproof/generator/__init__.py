@@ -8,7 +8,8 @@ if this package's module graph reaches any of them.
 number's source, as-of date and basis in its docstring; ``batch.py`` builds
 one batch from a ``BatchSpec``; ``presets.py`` names the batches the CLI
 generates; ``manifest.py`` reads the manifest back; ``v2.py`` writes the
-files; ``money.py`` formats paise.
+files; ``money.py`` formats paise; ``command.py`` is the ``leakproof gen``
+handler the integrator wires into ``cli.py``.
 """
 
 from __future__ import annotations
