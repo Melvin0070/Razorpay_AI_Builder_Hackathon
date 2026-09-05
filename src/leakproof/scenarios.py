@@ -111,10 +111,15 @@ SCENARIOS: Final[dict[Scenario, ScenarioMeta]] = {
         _C.REFUND_NO_FEE_REVERSAL,
         "Missing fee reversal whose SAFE-T filing window has already closed at as_of.",
     ),
+    # Not "no date on the line": SettlementLine.posted_date is a date, never
+    # None, so that shape cannot be seeded. The window runs from the return
+    # scan or the refund date, whichever is later, and the scan is on neither
+    # report -- so the window is unstartable while the refund is plainly there.
     Scenario.C5_WINDOW_DATE_MISSING: ScenarioMeta(
         _K.SEEDED_ERROR,
         _C.REFUND_NO_FEE_REVERSAL,
-        "Missing fee reversal where the window's start date cannot be read from any line.",
+        "Missing fee reversal whose window start — the return delivery scan, later "
+        "than the refund date — appears in no file the pipeline reads.",
     ),
     Scenario.C5_GST_UNREGISTERED: ScenarioMeta(
         _K.SEEDED_ERROR,
