@@ -4,28 +4,41 @@ Everything is drawn from one ``random.Random(seed)`` in a fixed order, so the
 same spec yields byte-identical files. Money is integer paise throughout and
 every percentage goes through ``contract.apply_bp``.
 
+Order shape. An order is ``quantity`` units of one SKU at one unit price;
+``principal`` is ``quantity × unit price``. A share of orders also charge the
+buyer shipping and gift wrap, both per unit, because the fee bands are keyed
+per unit (``fees.py``): the referral fee on the unit price, the closing fee on
+the unit price including shipping and gift wrap. Every seeded amount is
+computed on that basis.
+
 Timeline conventions (all relative to the cycles, never to a clock):
 
-* ``cycle_count`` weekly settlement cycles end on ``last_cycle_end``; each
-  cycle's file is ``settlement_<end-date>.txt`` and its bank credit lands
+* ``cycle_count`` weekly settlement cycles end on ``as_of``; each cycle's
+  file is ``settlement_<end-date>.txt`` and its bank credit lands
   ``DEPOSIT_LAG_DAYS`` after the cycle end.
-* ``as_of`` defaults to the batch's maximum posted-date (D18), which the reserve
-  row posted on the last cycle's end date pins to that date.
+* ``as_of`` is the batch's maximum posted-date by construction (D18): the
+  reserve row posted on the last cycle's end date pins it there, and an
+  explicit ``as_of`` moves the whole timeline so the last cycle ends on it.
 * the coverage window opens two cycles before the first cycle and closes on
   the last cycle's end: a delivery inside it is one this batch's settlements
   are expected to carry, so absence is evidence (D20); a delivery before it
   takes OUT-OF-WINDOW.
-* the seller's ``gst_registered`` capability turns on at the last cycle's
-  start whenever ``C1_GST_UNREGISTERED`` is seeded: that order's dates all
-  precede the boundary, and the orders that must read as registered
-  (``C1_PLAIN``, ``C1_INVOICE_PENDING``) are dated entirely after it, so the
-  verdict does not depend on which of the order's dates the capability is
-  evaluated on.
-* SAFE-T window placement: an "open" window puts the refund inside the last
-  two cycles (at most 13 days before ``as_of``); an "expired" one puts it in
-  the first cycle, which is 21 days or more before ``as_of`` once there are
-  four cycles. The generator does not encode the window length itself; the
-  labels and rules lanes read it from the policy sources.
+* class-5 placement is relative to the last cycle (the detector's cycle rule
+  compares refund and max settlement dates) and to ``as_of`` (the SAFE-T
+  window). A refund with an "open" window sits 8..13 days before ``as_of``:
+  at least one full cycle back under either reading of "at least", and
+  inside the shortest filing-window figure the policy sources give (15 days,
+  RS2 open item 6; the labels and rules lanes were told to encode that
+  figure). "Awaiting cycle" sits 0..6 days back. "Expired" sits in the first
+  cycle, 21 days or more back with four cycles: expired under the 15-day
+  figure, not under 30. The generator never encodes the window length.
+* when ``C5_GST_UNREGISTERED`` is seeded, the seller's ``gst_registered``
+  capability turns on ``cycle_days + 4`` days before ``as_of``. Every date of
+  the unregistered order precedes that boundary and every date of every
+  other seeded class-5 order that must read as registered follows it, so the
+  verdict holds whichever of the order's own dates the capability is
+  evaluated on. It cannot hold if the capability is evaluated on ``as_of``
+  (one seller, one ``as_of``, two verdicts); the report says so.
 """
 
 from __future__ import annotations
@@ -42,6 +55,7 @@ from leakproof.contract import (
     MATERIALITY_FLOOR_PAISE,
     TOLERANCE_PAISE,
     ErrorClass,
+    EvidenceStatus,
     LineKind,
     Paise,
     RefundInitiator,
@@ -52,11 +66,11 @@ from leakproof.contract import (
 from leakproof.generator import fees, v2
 from leakproof.generator.manifest import write_manifest
 from leakproof.generator.money import format_paise
-from leakproof.scenarios import SCENARIOS, SEEDED_ERROR_SCENARIOS, Scenario, ScenarioKind
+from leakproof.scenarios import SCENARIOS, SEEDED_ERROR_SCENARIOS, Scenario
 from leakproof.serialize import dumps
 from leakproof.types import CapabilityFact, CoverageWindow, Manifest, SeededError, SellerProfile
 
-GENERATOR_NAME: Final[str] = "leakproof-generator/0.1"
+GENERATOR_NAME: Final[str] = "leakproof-generator/0.2"
 DEFAULT_LAST_CYCLE_END: Final[date] = date(2026, 8, 21)
 DEFAULT_CYCLE_COUNT: Final[int] = 4
 #: Scenario placement needs a first cycle three weeks before the last one.
@@ -65,6 +79,8 @@ DEPOSIT_LAG_DAYS: Final[int] = 2
 RESERVE_BP: Final[int] = 500
 #: D10: every seeded error is at least twice the materiality floor.
 MATERIAL_SEED_FLOOR: Final[Paise] = 2 * MATERIALITY_FLOOR_PAISE
+#: Sale dates precede the refund by this many days at most in a seeded refund case.
+MAX_SALE_TO_REFUND_DAYS: Final[int] = 10
 
 SELLER_ID: Final[str] = "A2LEAKPROOFIN1"
 SELLER_NAME: Final[str] = "Leakproof Demo Traders"
@@ -73,7 +89,7 @@ SAFE_T_CAPABILITY: Final[str] = "safe_t_enrolled"
 INVOICE_REQUIREMENT: Final[str] = "gst_tax_invoice"
 
 ORDER_PREFIXES: Final[tuple[int, ...]] = (171, 403, 404, 405, 406, 407, 408)
-SKU_WORDS: Final[dict[str, tuple[str, str, ...]]] = {
+SKU_WORDS: Final[dict[str, tuple[str, ...]]] = {
     "electronics-accessories": ("ELEC", "CBL", "HDP", "CHG", "SPK", "EAR", "MSE", "KBD", "PWB"),
     "home-kitchen": ("KTCH", "PAN", "KNF", "JAR", "POT", "PLT", "BWL", "KTL", "CUP"),
     "apparel": ("APRL", "SHT", "FRM", "CAS", "LIN", "DNM", "OXF", "CHK", "PLD"),
@@ -111,7 +127,15 @@ ITEM_GST_BP: Final[dict[str, int]] = {
     "toys": 1_200,
     "grocery": 500,
 }
-#: Easy Ship weight-handling fee, an acknowledged deduction (not audited).
+#: Units per order, weighted: most orders are single-unit.
+QUANTITY_WEIGHTS: Final[dict[int, int]] = {1: 15, 2: 3, 3: 2}
+#: Shipping the buyer pays, per unit, in rupees, on the orders that charge it.
+SHIPPING_CHARGES: Final[tuple[int, ...]] = (29, 49, 79, 99)
+SHIPPED_SHARE: Final[float] = 0.25
+#: Gift wrap the buyer pays, per unit, in rupees, on the orders that add it.
+GIFT_WRAP_CHARGES: Final[tuple[int, ...]] = (30, 50)
+WRAPPED_SHARE: Final[float] = 0.08
+#: Weight-handling fee Amazon deducts, an acknowledged deduction (not audited).
 SHIPPING_FEES: Final[tuple[Paise, ...]] = (4_500, 5_500, 6_500, 8_000, 11_200)
 PROMOTION_BPS: Final[tuple[int, ...]] = (300, 500, 1_000)
 UNSEEN_CODES: Final[tuple[str, ...]] = (
@@ -128,9 +152,13 @@ _ATOZ = v2.raw_transaction(TransactionType.ATOZ_REFUND)
 _ADJUSTMENT = v2.raw_transaction(TransactionType.ADJUSTMENT)
 _PRINCIPAL = v2.raw_pair(LineKind.PRINCIPAL)
 _ITEM_TAX = v2.raw_pair(LineKind.ITEM_TAX)
+_SHIPPING_CHARGE = v2.raw_pair(LineKind.SHIPPING_CHARGE)
+_SHIPPING_CHARGE_TAX = v2.raw_pair(LineKind.SHIPPING_CHARGE_TAX)
+_GIFT_WRAP = v2.raw_pair(LineKind.GIFT_WRAP, description="GiftWrap")
+_GIFT_WRAP_CHARGEBACK = v2.raw_pair(LineKind.GIFT_WRAP, description="GiftwrapChargeback")
 _COMMISSION = v2.raw_pair(LineKind.COMMISSION)
 _CLOSING = v2.raw_pair(LineKind.FIXED_CLOSING_FEE)
-_SHIPPING = v2.raw_pair(LineKind.SHIPPING_FEE)
+_SHIPPING_FEE = v2.raw_pair(LineKind.SHIPPING_FEE)
 _FEE_TAX = v2.raw_pair(LineKind.FEE_TAX)
 _REFUND_FEE = v2.raw_pair(LineKind.REFUND_ADMIN_FEE)
 _TECH_FEE = v2.raw_pair(LineKind.TECHNOLOGY_FEE)
@@ -148,11 +176,36 @@ _TRUE_NEGATIVES_AND_DISPOSITIONS: Final[tuple[Scenario, ...]] = (
     Scenario.UNCOVERED_CATEGORY,
 )
 
+#: Class-5 cases whose refund sits inside an open SAFE-T window and at least
+#: one full cycle before the last settlement date.
+_C5_OPEN_WINDOW: Final[frozenset[Scenario]] = frozenset(
+    {
+        Scenario.C5_PLAIN,
+        Scenario.C5_SELLER_ISSUED,
+        Scenario.C5_ATOZ,
+        Scenario.C5_WINDOW_DATE_MISSING,
+        Scenario.C5_GST_UNREGISTERED,
+        Scenario.C5_INVOICE_PENDING,
+    }
+)
+#: Class-5 cases whose verdict needs the seller to read as GST-registered.
+_C5_REGISTERED: Final[frozenset[Scenario]] = frozenset(
+    {
+        Scenario.C5_PLAIN,
+        Scenario.C5_AWAITING_CYCLE,
+        Scenario.C5_SELLER_ISSUED,
+        Scenario.C5_ATOZ,
+        Scenario.C5_WINDOW_DATE_MISSING,
+        Scenario.C5_INVOICE_PENDING,
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class BatchSpec:
     """What ``generate`` builds. ``scenario_counts`` is exact: that many orders
-    carry each scenario; the rest of ``order_count`` is ordinary traffic."""
+    carry each scenario; the rest of ``order_count`` is ordinary traffic.
+    ``as_of`` is the date the batch is cut, i.e. the last cycle's end."""
 
     batch_id: str
     seed: int
@@ -160,13 +213,20 @@ class BatchSpec:
     scenario_counts: Mapping[Scenario, int]
     cycle_count: int = DEFAULT_CYCLE_COUNT
     cycle_days: int = DEFAULT_CYCLE_DAYS
-    last_cycle_end: date = DEFAULT_LAST_CYCLE_END
     as_of: date | None = None
     categories: tuple[str, ...] = fees.COVERED_CATEGORIES
     malformed_last_settlement: bool = False
 
     def count(self, scenario: Scenario) -> int:
         return self.scenario_counts.get(scenario, 0)
+
+    @property
+    def last_cycle_end(self) -> date:
+        return self.as_of if self.as_of is not None else DEFAULT_LAST_CYCLE_END
+
+    @property
+    def first_cycle_start(self) -> date:
+        return self.last_cycle_end - timedelta(days=self.cycle_count * self.cycle_days - 1)
 
     @property
     def scenario_orders(self) -> int:
@@ -222,10 +282,15 @@ def validate_spec(spec: BatchSpec) -> None:
             f"seeding needs at least {MIN_CYCLES_WITH_SCENARIOS} cycles of "
             f"{DEFAULT_CYCLE_DAYS}+ days"
         )
+    if spec.cycle_count >= 1 and spec.first_cycle_start < fees.REFERRAL_VALID_FROM:
+        problems.append(
+            f"first cycle starts {spec.first_cycle_start}, before the encoded fee "
+            f"schedule ({fees.REFERRAL_VALID_FROM})"
+        )
     if not spec.categories:
         problems.append("categories must not be empty")
     for category in spec.categories:
-        if category not in PRICE_POINTS:
+        if category not in PRICE_POINTS or not fees.is_known_category(category):
             problems.append(f"unknown category {category!r}")
     if problems:
         raise ValueError("; ".join(problems))
@@ -246,8 +311,13 @@ class OrderPlan:
     order_id: str
     sku: str
     category_id: str
+    quantity: int
+    unit_price: Paise
     principal: Paise
     tax: Paise
+    shipping: Paise  # what the buyer paid for shipping, all units
+    shipping_tax: Paise
+    gift_wrap: Paise  # what the buyer paid for gift wrap, all units
     order_date: date
     delivery_date: date | None
     refund_initiated_by: RefundInitiator
@@ -261,11 +331,19 @@ class OrderPlan:
     cites: tuple[tuple[str, str], ...] = ()  # (block tag, line tag)
     cite_order_row: bool = False
     note: str = ""
-    evidence: tuple[tuple[str, str, date | None], ...] = ()
+    evidence: tuple[tuple[str, EvidenceStatus, date | None], ...] = ()
+
+    @property
+    def closing_key(self) -> Paise:
+        return fees.closing_key(self.principal, self.shipping, self.gift_wrap, self.quantity)
 
 
 def _pct(bp: int) -> str:
     return f"{bp / 100:.2f}%"
+
+
+def _units(plan: OrderPlan) -> str:
+    return f"{plan.quantity} x {format_paise(plan.unit_price)}"
 
 
 class _Builder:
@@ -279,8 +357,12 @@ class _Builder:
         self.coverage = CoverageWindow(
             self.first.start - timedelta(days=2 * spec.cycle_days), self.last.end
         )
-        self.as_of = spec.as_of if spec.as_of is not None else self.last.end
-        self.gst_boundary = self.last.start
+        self.as_of = self.last.end
+        self.gst_boundary: date | None = (
+            self.as_of - timedelta(days=spec.cycle_days + 4)
+            if spec.count(Scenario.C5_GST_UNREGISTERED)
+            else None
+        )
         self.orders: list[OrderPlan] = []
         self.used_ids: set[str] = set()
 
@@ -334,49 +416,69 @@ class _Builder:
             f"{self.rng.randrange(60):02d}"
         )
 
-    def _pick_price(
-        self,
-        category: str,
-        *,
-        minimum: Paise = 0,
-        maximum: Paise | None = None,
-        min_commission: Paise = 0,
+    def _date_in(self, lo: date, hi: date) -> date:
+        if hi < lo:
+            raise AssertionError(f"empty date range {lo}..{hi}")
+        return lo + timedelta(days=self.rng.randint(0, (hi - lo).days))
+
+    def _pick_quantity(self) -> int:
+        return self.rng.choices(list(QUANTITY_WEIGHTS), weights=list(QUANTITY_WEIGHTS.values()))[0]
+
+    def _pick_unit_price(
+        self, category: str, *, minimum: Paise = 0, maximum: Paise | None = None
     ) -> Paise:
-        on = self.last.end
         candidates = [
             p * 100
             for p in PRICE_POINTS[category]
-            if p * 100 >= minimum
-            and (maximum is None or p * 100 <= maximum)
-            and fees.commission_paise(category, p * 100, on) >= min_commission
+            if p * 100 >= minimum and (maximum is None or p * 100 <= maximum)
         ]
         if not candidates:
-            raise ValueError(f"no price point for {category} within the constraints")
+            raise ValueError(f"no price point for {category} within [{minimum}, {maximum}]")
         return self.rng.choice(candidates)
 
-    def _category_for(self, predicate) -> str:  # noqa: ANN001 - internal callable
-        options = [c for c in fees.COVERED_CATEGORIES if predicate(c)]
+    def _category_with_price(self, minimum: Paise) -> str:
+        options = [c for c in fees.COVERED_CATEGORIES if max(PRICE_POINTS[c]) * 100 >= minimum]
         return self.rng.choice(options)
 
-    def _item_tax(self, category: str, principal: Paise) -> Paise:
-        return apply_bp(principal, ITEM_GST_BP[category])
+    def _any_category(self) -> str:
+        return self.rng.choice(fees.COVERED_CATEGORIES)
+
+    def _pick_extras(self, *, shipped: bool | None = None, wrapped: bool | None = None) -> tuple:
+        """Per-unit shipping and gift wrap in paise; ``None`` draws them."""
+        if shipped is None:
+            shipped = self.rng.random() < SHIPPED_SHARE
+        if wrapped is None:
+            wrapped = self.rng.random() < WRAPPED_SHARE
+        shipping = self.rng.choice(SHIPPING_CHARGES) * 100 if shipped else 0
+        gift_wrap = self.rng.choice(GIFT_WRAP_CHARGES) * 100 if wrapped else 0
+        return shipping, gift_wrap
 
     def _new_plan(
         self,
         category: str,
-        principal: Paise,
+        unit_price: Paise,
+        quantity: int,
         order_date: date,
         delivery: date | None,
         *,
+        shipping_per_unit: Paise = 0,
+        gift_wrap_per_unit: Paise = 0,
         refund_by: RefundInitiator = RefundInitiator.NONE,
         scenario: Scenario | None = None,
     ) -> OrderPlan:
+        principal = unit_price * quantity
+        shipping = shipping_per_unit * quantity
         plan = OrderPlan(
             order_id=self._order_id(),
             sku=self._sku(category),
             category_id=category,
+            quantity=quantity,
+            unit_price=unit_price,
             principal=principal,
-            tax=self._item_tax(category, principal),
+            tax=apply_bp(principal, ITEM_GST_BP[category]),
+            shipping=shipping,
+            shipping_tax=apply_bp(shipping, ITEM_GST_BP[category]),
+            gift_wrap=gift_wrap_per_unit * quantity,
             order_date=order_date,
             delivery_date=delivery,
             refund_initiated_by=refund_by,
@@ -391,6 +493,7 @@ class _Builder:
     def _sale_dates(
         self, cycle: Cycle, *, posted_min: date | None = None, posted_max: date | None = None
     ) -> tuple[date, date, date]:
+        """Order, delivery and posted dates for a sale settled in ``cycle``."""
         lo = max(cycle.start, posted_min) if posted_min else cycle.start
         hi = min(cycle.end, posted_max) if posted_max else cycle.end
         if hi < lo:
@@ -400,10 +503,20 @@ class _Builder:
         order_date = delivery - timedelta(days=self.rng.randint(2, 5))
         return order_date, delivery, posted
 
-    def _date_in(self, lo: date, hi: date) -> date:
-        if hi < lo:
-            raise AssertionError(f"empty date range {lo}..{hi}")
-        return lo + timedelta(days=self.rng.randint(0, (hi - lo).days))
+    def _dates_before_refund(self, refund: date, *, earliest_order: date) -> tuple[date, date, date]:
+        """Order, delivery and posted dates for a sale refunded on ``refund``:
+        posted inside a cycle, 1..10 days earlier, nothing before
+        ``earliest_order``."""
+        posted = max(
+            self.first.start,
+            earliest_order + timedelta(days=1),
+            refund - timedelta(days=self.rng.randint(1, MAX_SALE_TO_REFUND_DAYS)),
+        )
+        delivery = max(earliest_order + timedelta(days=1), posted - timedelta(days=self.rng.randint(0, 2)))
+        order_date = max(earliest_order, delivery - timedelta(days=self.rng.randint(1, 4)))
+        if not posted < refund:
+            raise AssertionError(f"sale posted {posted} not before refund {refund}")
+        return order_date, delivery, posted
 
     # ----------------------------------------------------------------- blocks
 
@@ -422,23 +535,39 @@ class _Builder:
         """The Order transaction. Every ``None`` override means "the correct
         amount"; a value means "what Amazon actually posted"."""
         cycle = self._cycle_for(posted)
-        p = plan.principal
         charged_commission = (
-            fees.commission_paise(plan.category_id, p, posted) if commission is None else commission
+            fees.commission_paise(plan.category_id, plan.unit_price, plan.quantity, posted)
+            if commission is None
+            else commission
         )
-        charged_closing = fees.closing_fee_paise(p, posted) if closing is None else closing
-        shipping = self.rng.choice(SHIPPING_FEES)
-        fee_tax = fees.fee_gst_paise(charged_commission + charged_closing + shipping)
-        tcs_legs = fees.tcs_legs(p, intra_state=plan.intra_state, on=posted) if tcs is None else tcs
-        tds_amount = fees.tds_paise(p, posted) if tds is None else tds
+        charged_closing = (
+            fees.closing_fee_paise(plan.category_id, plan.closing_key, plan.quantity, posted)
+            if closing is None
+            else closing
+        )
+        shipping_fee = self.rng.choice(SHIPPING_FEES)
+        fee_tax = fees.fee_gst_paise(charged_commission + charged_closing + shipping_fee)
+        tcs_legs = (
+            fees.tcs_legs(plan.principal, intra_state=plan.intra_state, on=posted)
+            if tcs is None
+            else tcs
+        )
+        tds_amount = fees.tds_paise(plan.principal, posted) if tds is None else tds
         plan.commission_charged = charged_commission
         lines = [
-            v2.Line(*_PRINCIPAL, p, "principal"),
+            v2.Line(*_PRINCIPAL, plan.principal, "principal"),
             v2.Line(*_ITEM_TAX, plan.tax, "tax"),
-            v2.Line(*_COMMISSION, -charged_commission, "commission"),
-            v2.Line(*_CLOSING, -charged_closing, "closing"),
-            v2.Line(*_SHIPPING, -shipping, "shipping"),
         ]
+        if plan.shipping:
+            lines.append(v2.Line(*_SHIPPING_CHARGE, plan.shipping, "shipping_charge"))
+            lines.append(v2.Line(*_SHIPPING_CHARGE_TAX, plan.shipping_tax, "shipping_charge_tax"))
+        if plan.gift_wrap:
+            lines.append(v2.Line(*_GIFT_WRAP, plan.gift_wrap, "gift_wrap"))
+        lines.append(v2.Line(*_COMMISSION, -charged_commission, "commission"))
+        lines.append(v2.Line(*_CLOSING, -charged_closing, "closing"))
+        if plan.gift_wrap:
+            lines.append(v2.Line(*_GIFT_WRAP_CHARGEBACK, -plan.gift_wrap, "gift_wrap_chargeback"))
+        lines.append(v2.Line(*_SHIPPING_FEE, -shipping_fee, "shipping_fee"))
         if promotion:
             promo_id = f"SELLER-COUPON-{self.rng.randrange(10**6):06d}"
             lines.append(v2.Line(*_PROMOTION, -promotion, "promotion", promo_id))
@@ -451,7 +580,7 @@ class _Builder:
             _ORDER,
             plan.order_id,
             plan.sku,
-            1,
+            plan.quantity,
             posted,
             self._posted_time(),
             cycle.index,
@@ -464,7 +593,13 @@ class _Builder:
         return block
 
     def _refund_block(
-        self, plan: OrderPlan, posted: date, *, txn_type: str = _REFUND, reverse: bool = True
+        self,
+        plan: OrderPlan,
+        posted: date,
+        *,
+        txn_type: str = _REFUND,
+        reverse: bool = True,
+        undated: bool = False,
     ) -> v2.Block:
         """The refund event. ``reverse=False`` omits the commission reversal
         and its GST: the class-5 shape."""
@@ -475,6 +610,9 @@ class _Builder:
             v2.Line(*_PRINCIPAL, -plan.principal, "principal"),
             v2.Line(*_ITEM_TAX, -plan.tax, "tax"),
         ]
+        if plan.shipping:
+            lines.append(v2.Line(*_SHIPPING_CHARGE, -plan.shipping, "shipping_charge"))
+            lines.append(v2.Line(*_SHIPPING_CHARGE_TAX, -plan.shipping_tax, "shipping_charge_tax"))
         fee_tax = -fees.fee_gst_paise(refund_fee)
         if reverse:
             lines.append(v2.Line(*_COMMISSION, charged, "commission"))
@@ -487,7 +625,7 @@ class _Builder:
             txn_type,
             plan.order_id,
             plan.sku,
-            1,
+            plan.quantity,
             posted,
             self._posted_time(),
             cycle.index,
@@ -495,6 +633,7 @@ class _Builder:
             tuple(lines),
             shipment_id=plan.shipment_id,
             order_item_code=plan.order_item_code,
+            undated=undated,
         )
         plan.blocks.append(block)
         return block
@@ -507,7 +646,7 @@ class _Builder:
             _REFUND,
             plan.order_id,
             plan.sku,
-            1,
+            plan.quantity,
             posted,
             self._posted_time(),
             cycle.index,
@@ -528,7 +667,7 @@ class _Builder:
             _ADJUSTMENT,
             plan.order_id,
             plan.sku,
-            1,
+            plan.quantity,
             posted,
             self._posted_time(),
             cycle.index,
@@ -541,30 +680,36 @@ class _Builder:
         plan.blocks.append(block)
         return block
 
-    def _refund_after(self, plan: OrderPlan, sale_posted: date, lo: date, hi: date) -> date:
-        """A refund date in ``[lo, hi]`` strictly after the sale posted."""
-        return self._date_in(max(lo, sale_posted + timedelta(days=1)), hi)
-
     # ------------------------------------------------------------- ordinary
 
     def _background_order(self, category: str | None = None) -> OrderPlan:
         if category is None:
             weights = [4 if c == "electronics-accessories" else 3 for c in self.spec.categories]
             category = self.rng.choices(self.spec.categories, weights=weights)[0]
-        principal = self._pick_price(category)
+        unit_price = self._pick_unit_price(category)
+        quantity = self._pick_quantity()
+        shipping, gift_wrap = self._pick_extras()
         cycle = self.rng.choice(self.cycles)
         order_date, delivery, posted = self._sale_dates(cycle)
-        plan = self._new_plan(category, principal, order_date, delivery)
+        plan = self._new_plan(
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+        )
         promotion = 0
         if self.rng.random() < 0.15:
-            promotion = apply_bp(principal, self.rng.choice(PROMOTION_BPS))
+            promotion = apply_bp(plan.principal, self.rng.choice(PROMOTION_BPS))
         self._sale_block(plan, posted, promotion=promotion)
         if posted < self.last.end and self.rng.random() < 0.08:
             seller_issued = self.rng.random() < 0.3
             plan.refund_initiated_by = (
                 RefundInitiator.SELLER if seller_issued else RefundInitiator.AMAZON
             )
-            self._refund_block(plan, self._refund_after(plan, posted, posted, self.last.end))
+            self._refund_block(plan, self._date_in(posted + timedelta(days=1), self.last.end))
         if category not in fees.COVERED_CATEGORIES:
             plan.scenario = Scenario.UNCOVERED_CATEGORY
             plan.cites = (("sale", "principal"),)
@@ -577,157 +722,179 @@ class _Builder:
     def _overcharge(self, plan: OrderPlan, on: date) -> tuple[Paise, str]:
         """A commission above the schedule by at least twice the floor, either
         the pre-March-2026 tier (a stale rate) or a few hundred bp too many."""
-        p = plan.principal
-        correct_bp = fees.referral_bp(plan.category_id, p, on)
-        correct = apply_bp(p, correct_bp)
+        u, q = plan.unit_price, plan.quantity
+        correct_bp = fees.referral_bp(plan.category_id, u, on)
+        correct = fees.commission_at_bp(u, q, correct_bp)
         candidates: list[tuple[int, str]] = []
-        legacy_bp = fees.legacy_referral_bp(plan.category_id, p)
+        legacy_bp = fees.legacy_referral_bp(plan.category_id, u)
         if legacy_bp > correct_bp:
             candidates.append((legacy_bp, "the pre-2026-03-16 tier"))
         candidates.extend((correct_bp + extra, "an inflated rate") for extra in WRONG_RATE_EXTRA_BPS)
         viable = [
-            (bp, why) for bp, why in candidates if apply_bp(p, bp) - correct >= MATERIAL_SEED_FLOOR
+            (bp, why)
+            for bp, why in candidates
+            if fees.commission_at_bp(u, q, bp) - correct >= MATERIAL_SEED_FLOOR
         ]
         bp, why = self.rng.choice(viable)
-        charged = apply_bp(p, bp)
-        node = fees.SOURCE_NODES[plan.category_id]
+        charged = fees.commission_at_bp(u, q, bp)
         note = (
-            f"commission {_pct(bp)} charged ({why}) vs {_pct(correct_bp)} for {node!r} "
-            f"on principal {format_paise(p)}; overcharge excludes the GST that follows it"
+            f"commission {_pct(bp)} charged ({why}) vs {_pct(correct_bp)} for "
+            f"{fees.CATEGORY_NODES[plan.category_id]!r} on {_units(plan)} (unit price band); "
+            f"overcharge excludes the GST that follows it"
         )
         return charged, note
 
     def _seed_c1(self, scenario: Scenario) -> None:
-        category = self._category_for(lambda c: True)
-        principal = self._pick_price(category, minimum=60_000)
-        refund_by = RefundInitiator.AMAZON
-        refund_txn = _REFUND
-        if scenario is Scenario.C1_SELLER_REFUND_EXCLUDED:
-            refund_by = RefundInitiator.SELLER
-        if scenario is Scenario.C1_ATOZ_EXCLUDED:
-            refund_txn = _ATOZ
-        if scenario is Scenario.C1_WINDOW_DATE_MISSING:
-            refund_by = RefundInitiator.NONE
-
-        if scenario in (Scenario.C1_PLAIN, Scenario.C1_INVOICE_PENDING):
-            # Every date on or after the GST boundary (the last cycle's start).
-            order_date = self.gst_boundary + timedelta(days=self.rng.randint(0, 1))
-            delivery = order_date + timedelta(days=2)
-            posted = delivery + timedelta(days=1)
-            refund = min(posted + timedelta(days=self.rng.randint(1, 2)), self.last.end)
-        elif scenario is Scenario.C1_GST_UNREGISTERED:
-            cycle = self.cycles[-2]
-            order_date, delivery, posted = self._sale_dates(
-                cycle, posted_max=cycle.end - timedelta(days=2)
-            )
-            refund = self._refund_after(self, posted, cycle.start, cycle.end)
-        elif scenario is Scenario.C1_WINDOW_EXPIRED:
-            cycle = self.first
-            order_date, delivery, posted = self._sale_dates(
-                cycle, posted_max=cycle.end - timedelta(days=1)
-            )
-            refund = self._refund_after(self, posted, cycle.start, cycle.end)
-        else:
-            cycle = self.rng.choice(self.cycles[1:-1])
-            order_date, delivery, posted = self._sale_dates(
-                cycle, posted_max=cycle.end - timedelta(days=1)
-            )
-            refund = self._refund_after(self, posted, posted, self.last.end)
-
+        category = self._any_category()
+        quantity = self._pick_quantity()
+        unit_price = self._pick_unit_price(category, minimum=40_000)
+        shipping, gift_wrap = self._pick_extras()
+        cycle = self.rng.choice(self.cycles)
+        order_date, delivery, posted = self._sale_dates(cycle)
         plan = self._new_plan(
-            category, principal, order_date, delivery, refund_by=refund_by, scenario=scenario
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+            scenario=scenario,
         )
         charged, note = self._overcharge(plan, posted)
-        correct = fees.commission_paise(category, principal, posted)
+        correct = fees.commission_paise(category, unit_price, quantity, posted)
         self._sale_block(plan, posted, commission=charged)
         plan.expected_amount = charged - correct
         plan.cites = (("sale", "commission"), ("sale", "principal"))
-        if scenario is Scenario.C1_WINDOW_DATE_MISSING:
-            plan.note = f"{note}; no refund or return event on any line, so no window start date"
-            plan.evidence = ((INVOICE_REQUIREMENT, "supplied", posted),)
-            return
-        self._refund_block(plan, refund, txn_type=refund_txn, reverse=True)
-        plan.cites += (("refund", "principal"),)
-        days = (self.as_of - refund).days
-        detail = {
-            Scenario.C1_PLAIN: "GST tax invoice supplied (evidence.csv)",
-            Scenario.C1_INVOICE_PENDING: "GST tax invoice requested, not yet supplied (evidence.csv)",
-            Scenario.C1_GST_UNREGISTERED: (
-                f"every date precedes the seller's GST registration on {self.gst_boundary}"
-            ),
-            Scenario.C1_WINDOW_EXPIRED: "refund in the first cycle, so the window has expired",
-            Scenario.C1_ATOZ_EXCLUDED: "the refund is an A-to-z Guarantee refund",
-            Scenario.C1_SELLER_REFUND_EXCLUDED: "the refund was issued by the seller",
-        }[scenario]
-        plan.note = f"{note}; refund posted {refund} ({days} days before as_of); {detail}"
-        if scenario is Scenario.C1_INVOICE_PENDING:
-            plan.evidence = ((INVOICE_REQUIREMENT, "pending", None),)
-        elif scenario is not Scenario.C1_GST_UNREGISTERED:
-            plan.evidence = ((INVOICE_REQUIREMENT, "supplied", min(refund, self.as_of)),)
+        plan.note = f"{note}; support ticket, no refund event and no filing window (ADR-0006)"
 
     # --------------------------------------------------------------- class 2
 
     def _seed_c2(self, scenario: Scenario) -> None:
-        category = self._category_for(lambda c: True)
+        category = self._any_category()
+        quantity = self._pick_quantity()
+        shipping, gift_wrap = self._pick_extras()
         cycle = self.rng.choice(self.cycles)
         order_date, delivery, posted = self._sale_dates(cycle)
-        bands = fees.closing_schedule(posted).bands
+        bands = fees.closing_band_fees(category, posted)
+        top_bounded = fees.CLOSING_BAND_UPPER[-1]
         if scenario is Scenario.C2_SLAB_BOUNDARY:
-            principal = self.rng.choice([upper for upper, _ in bands if upper is not None])
+            # The key lands exactly on the highest bounded band's inclusive
+            # upper bound; the charge is the open band's fee.
+            unit_price = top_bounded - shipping - gift_wrap
         else:
-            principal = self._pick_price(category, maximum=bands[-2][0] or 0)
-        correct = fees.closing_fee_paise(principal, posted)
-        higher = [fee for _, fee in bands if fee - correct >= MATERIAL_SEED_FLOOR]
-        charged = higher[0] if scenario is Scenario.C2_SLAB_BOUNDARY else self.rng.choice(higher)
-        plan = self._new_plan(category, principal, order_date, delivery, scenario=scenario)
+            unit_price = self._pick_unit_price(category, maximum=top_bounded - shipping - gift_wrap)
+        plan = self._new_plan(
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+            scenario=scenario,
+        )
+        key = plan.closing_key
+        band = fees.closing_band(key)
+        correct_unit = bands[band]
+        if scenario is Scenario.C2_SLAB_BOUNDARY:
+            if key != top_bounded:
+                raise AssertionError(f"boundary key {key} != {top_bounded}")
+            wrong_unit = bands[-1]
+        else:
+            higher = [
+                fee
+                for i, fee in enumerate(bands)
+                if i != band and quantity * (fee - correct_unit) >= MATERIAL_SEED_FLOOR
+            ]
+            wrong_unit = self.rng.choice(higher)
+        charged = quantity * wrong_unit
+        correct = quantity * correct_unit
         self._sale_block(plan, posted, closing=charged)
         plan.expected_amount = charged - correct
-        plan.cites = (("sale", "closing"), ("sale", "principal"))
-        edge = " (principal exactly at the band's inclusive upper bound)" if (
+        cites = [("sale", "closing"), ("sale", "principal")]
+        if plan.shipping:
+            cites.append(("sale", "shipping_charge"))
+        if plan.gift_wrap:
+            cites.append(("sale", "gift_wrap"))
+        plan.cites = tuple(cites)
+        edge = " (exactly at the band's inclusive upper bound)" if (
             scenario is Scenario.C2_SLAB_BOUNDARY
         ) else ""
         plan.note = (
-            f"closing fee {format_paise(charged)} charged vs {format_paise(correct)} for the "
-            f"Easy Ship band holding principal {format_paise(principal)}{edge}"
+            f"closing fee {format_paise(charged)} charged vs {format_paise(correct)}: "
+            f"{quantity} unit(s) keyed at {format_paise(key)}{edge} = unit price "
+            f"{format_paise(plan.unit_price)} + shipping {format_paise(plan.shipping // quantity)} "
+            f"+ gift wrap {format_paise(plan.gift_wrap // quantity)}, Fulfilment Centre "
+            f"{fees.closing_group(category)} group; the fee charged is that of a different band; "
+            f"amount excludes the GST that follows it"
         )
 
     # --------------------------------------------------------------- class 5
 
+    def _c5_refund_window(self, scenario: Scenario) -> tuple[date, date, date]:
+        """(earliest refund, latest refund, earliest order date) for a class-5 case."""
+        cd = self.spec.cycle_days
+        L = self.last.end
+        open_lo, open_hi = L - timedelta(days=2 * cd - 1), L - timedelta(days=cd + 1)
+        earliest_order = self.coverage.start
+        if scenario is Scenario.C5_AWAITING_CYCLE:
+            lo, hi = L - timedelta(days=cd - 1), L
+        elif scenario is Scenario.C5_WINDOW_EXPIRED:
+            lo, hi = self.first.start + timedelta(days=1), self.first.end
+        elif scenario is Scenario.C5_GST_UNREGISTERED:
+            assert self.gst_boundary is not None
+            lo, hi = open_lo, self.gst_boundary - timedelta(days=1)
+        elif scenario in _C5_OPEN_WINDOW:
+            lo, hi = open_lo, open_hi
+        else:
+            raise AssertionError(f"no refund window for {scenario}")
+        if self.gst_boundary is not None and scenario in _C5_REGISTERED:
+            earliest_order = self.gst_boundary
+            lo = max(lo, self.gst_boundary + timedelta(days=2))
+        return lo, hi, earliest_order
+
     def _seed_c5(self, scenario: Scenario) -> None:
-        category = self._category_for(lambda c: True)
-        principal = self._pick_price(category, min_commission=MATERIAL_SEED_FLOOR)
+        category = self._any_category()
+        quantity = self._pick_quantity()
+        shipping, gift_wrap = self._pick_extras()
+        # The commission itself is the seeded amount, so it must clear the floor.
+        unit_price = self._pick_unit_price(category, minimum=100_100)
         refund_by = RefundInitiator.AMAZON
         refund_txn = _REFUND
         if scenario is Scenario.C5_SELLER_ISSUED:
             refund_by = RefundInitiator.SELLER
         if scenario is Scenario.C5_ATOZ:
             refund_txn = _ATOZ
-        penultimate = self.cycles[-2]
-        if scenario is Scenario.C5_AWAITING_CYCLE:
-            sale_cycle = self.rng.choice(self.cycles)
-            order_date, delivery, posted = self._sale_dates(
-                sale_cycle, posted_max=self.last.end - timedelta(days=1)
-            )
-            refund = self._refund_after(self, posted, self.last.start, self.last.end)
-        elif scenario is Scenario.C5_PLAIN:
-            sale_cycle = self.rng.choice(self.cycles[:-1])
-            order_date, delivery, posted = self._sale_dates(
-                sale_cycle, posted_max=penultimate.end - timedelta(days=1)
-            )
-            refund = self._refund_after(self, posted, penultimate.start, penultimate.end)
+
+        if scenario is Scenario.C5_REVERSED_LATER_CYCLE:
+            refund_cycle = self.rng.choice(self.cycles[:-1])
+            refund = self._date_in(refund_cycle.start + timedelta(days=1), refund_cycle.end)
+            earliest_order = self.coverage.start
         else:
-            sale_cycle = self.rng.choice(self.cycles[:-1])
-            order_date, delivery, posted = self._sale_dates(
-                sale_cycle, posted_max=penultimate.end - timedelta(days=1)
-            )
-            refund = self._refund_after(self, posted, posted, penultimate.end)
+            lo, hi, earliest_order = self._c5_refund_window(scenario)
+            refund = self._date_in(lo, hi)
+        order_date, delivery, posted = self._dates_before_refund(
+            refund, earliest_order=earliest_order
+        )
         plan = self._new_plan(
-            category, principal, order_date, delivery, refund_by=refund_by, scenario=scenario
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+            refund_by=refund_by,
+            scenario=scenario,
         )
         self._sale_block(plan, posted)
-        self._refund_block(plan, refund, txn_type=refund_txn, reverse=False)
-        days = (self.as_of - refund).days
+        undated = scenario is Scenario.C5_WINDOW_DATE_MISSING
+        self._refund_block(plan, refund, txn_type=refund_txn, reverse=False, undated=undated)
         commission = plan.commission_charged
+        if commission < MATERIAL_SEED_FLOOR:
+            raise AssertionError(f"{scenario}: commission {commission} below twice the floor")
+        days = (self.as_of - refund).days
         plan.cites = (("refund", "principal"), ("sale", "commission"))
         if scenario is Scenario.C5_REVERSED_LATER_CYCLE:
             reversal_cycle = self.rng.choice(self.cycles[self._cycle_for(refund).index + 1 :])
@@ -740,23 +907,51 @@ class _Builder:
             )
             return
         plan.expected_amount = commission
+        cd = self.spec.cycle_days
         detail = {
-            Scenario.C5_PLAIN: "no reversal in any later cycle",
-            Scenario.C5_AWAITING_CYCLE: "less than one full cycle before the max settlement date",
-            Scenario.C5_SELLER_ISSUED: "refund issued by the seller; no reversal since",
-            Scenario.C5_ATOZ: "A-to-z Guarantee refund; no reversal since",
+            Scenario.C5_PLAIN: (
+                f"at least one full {cd}-day cycle before the max settlement date; SAFE-T "
+                f"window open; GST tax invoice supplied (evidence.csv)"
+            ),
+            Scenario.C5_AWAITING_CYCLE: (
+                f"less than one full {cd}-day cycle before the max settlement date"
+            ),
+            Scenario.C5_SELLER_ISSUED: "refund issued by the seller (orders.csv), a SAFE-T exclusion",
+            Scenario.C5_ATOZ: "an A-to-z Guarantee refund, a SAFE-T exclusion",
+            Scenario.C5_WINDOW_EXPIRED: (
+                "refund in the first cycle, so the SAFE-T window has closed at as_of under the "
+                "shortest published figure"
+            ),
+            Scenario.C5_WINDOW_DATE_MISSING: (
+                "the refund rows carry no posted-date, so no line gives the window's start date; "
+                "the refund is known only from orders.csv refund_initiated_by"
+            ),
+            Scenario.C5_GST_UNREGISTERED: (
+                f"every date of the order precedes the seller's GST registration on "
+                f"{self.gst_boundary} (seller_profile.json), so the tax invoice can never exist"
+            ),
+            Scenario.C5_INVOICE_PENDING: (
+                "GST-registered seller; the tax invoice is requested and not yet supplied "
+                "(evidence.csv)"
+            ),
         }[scenario]
         plan.note = (
             f"refund posted {refund} ({days} days before as_of); commission "
-            f"{format_paise(commission)} charged on the sale never reversed; {detail}; "
-            f"amount excludes the GST reversal that follows it"
+            f"{format_paise(commission)} charged on the sale ({_units(plan)}) never reversed; "
+            f"{detail}; amount excludes the GST reversal that follows it"
         )
+        if scenario is Scenario.C5_INVOICE_PENDING:
+            plan.evidence = ((INVOICE_REQUIREMENT, EvidenceStatus.PENDING, None),)
+        elif scenario is not Scenario.C5_GST_UNREGISTERED:
+            supplied = min(refund + timedelta(days=1), self.as_of)
+            plan.evidence = ((INVOICE_REQUIREMENT, EvidenceStatus.SATISFIED, supplied),)
 
     # --------------------------------------------------------------- class 6
 
     def _seed_c6(self, scenario: Scenario) -> None:
-        category = self._category_for(lambda c: True)
-        principal = self._pick_price(category)
+        category = self._any_category()
+        unit_price = self._pick_unit_price(category)
+        quantity = self._pick_quantity()
         cd = self.spec.cycle_days
         if scenario is Scenario.C6_OUT_OF_WINDOW:
             delivery = self._date_in(
@@ -769,7 +964,7 @@ class _Builder:
         else:
             delivery = self._date_in(self.coverage.start, self.as_of - timedelta(days=2 * cd + 2))
         order_date = delivery - timedelta(days=self.rng.randint(2, 5))
-        plan = self._new_plan(category, principal, order_date, delivery, scenario=scenario)
+        plan = self._new_plan(category, unit_price, quantity, order_date, delivery, scenario=scenario)
         plan.cite_order_row = True
         if scenario is Scenario.C6_PAID_LATER_CYCLE:
             cycle = self.rng.choice(self.cycles[1:])
@@ -786,25 +981,37 @@ class _Builder:
                 f"{self.coverage.start}; absent from every file; OUT-OF-WINDOW, not class 6"
             )
         else:
-            plan.expected_amount = principal + plan.tax
+            plan.expected_amount = plan.principal + plan.tax
             plan.note = (
                 f"delivered {delivery} ({(self.as_of - delivery).days} days before as_of, more "
                 f"than two {cd}-day cycles) and absent from every settlement; amount is the "
-                f"order's principal plus tax (ADR-0005 bound)"
+                f"order's principal plus tax from orders.csv (ADR-0005 bound)"
             )
 
     # --------------------------------------------------------------- class 7
 
     def _seed_c7(self, scenario: Scenario) -> None:
-        if scenario is Scenario.C7_TCS_MISMATCH:
-            minimum = 400_000
-        else:
-            minimum = 250_000
-        category = self._category_for(lambda c: max(PRICE_POINTS[c]) * 100 >= minimum)
-        principal = self._pick_price(category, minimum=minimum)
+        # The withheld-vs-recomputed delta is 0.5% (TCS) or 0.9% (TDS) of the
+        # principal, so the principal must clear ₹4,000 or ₹2,223.
+        minimum = 400_000 if scenario is Scenario.C7_TCS_MISMATCH else 225_000
+        quantity = self._pick_quantity()
+        unit_minimum = -(-minimum // quantity)
+        category = self._category_with_price(unit_minimum)
+        unit_price = self._pick_unit_price(category, minimum=unit_minimum)
+        shipping, gift_wrap = self._pick_extras()
         cycle = self.rng.choice(self.cycles)
         order_date, delivery, posted = self._sale_dates(cycle)
-        plan = self._new_plan(category, principal, order_date, delivery, scenario=scenario)
+        plan = self._new_plan(
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+            scenario=scenario,
+        )
+        principal = plan.principal
         if scenario is Scenario.C7_TCS_MISMATCH:
             wrong = fees.legacy_tcs_legs(principal, intra_state=plan.intra_state)
             correct = fees.tcs_legs(principal, intra_state=plan.intra_state, on=posted)
@@ -812,7 +1019,7 @@ class _Builder:
             withheld = sum(v for _, v in wrong)
             expected_total = sum(v for _, v in correct)
             plan.expected_amount = withheld - expected_total
-            plan.cites = tuple(("sale", f"tcs:{d}") for d, _ in wrong) + (("sale", "principal"),)
+            plan.cites = (*(("sale", f"tcs:{d}") for d, _ in wrong), ("sale", "principal"))
             plan.note = (
                 f"TCS withheld {format_paise(withheld)} at the pre-2024-07-10 rate vs "
                 f"{format_paise(expected_total)} at 0.5% of principal {format_paise(principal)}"
@@ -831,11 +1038,22 @@ class _Builder:
     # --------------------------------------------------------------- class 8
 
     def _seed_c8(self, scenario: Scenario) -> None:
-        category = self._category_for(lambda c: True)
-        principal = self._pick_price(category)
+        category = self._any_category()
+        unit_price = self._pick_unit_price(category)
+        quantity = self._pick_quantity()
+        shipping, gift_wrap = self._pick_extras()
         cycle = self.rng.choice(self.cycles)
         order_date, delivery, posted = self._sale_dates(cycle)
-        plan = self._new_plan(category, principal, order_date, delivery, scenario=scenario)
+        plan = self._new_plan(
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+            scenario=scenario,
+        )
         if scenario is Scenario.C8_CODE_UNSEEN:
             amount = self.rng.randrange(3_500, 45_000, 50)
             code = self.rng.choice(UNSEEN_CODES)
@@ -864,14 +1082,23 @@ class _Builder:
     # ------------------------------------------------------- outside classes
 
     def _seed_below_materiality(self) -> None:
-        category = self._category_for(lambda c: True)
-        principal = self._pick_price(category)
+        category = self._any_category()
+        unit_price = self._pick_unit_price(category)
+        quantity = self._pick_quantity()
+        shipping, gift_wrap = self._pick_extras()
         cycle = self.rng.choice(self.cycles)
         order_date, delivery, posted = self._sale_dates(cycle)
         plan = self._new_plan(
-            category, principal, order_date, delivery, scenario=Scenario.BELOW_MATERIALITY
+            category,
+            unit_price,
+            quantity,
+            order_date,
+            delivery,
+            shipping_per_unit=shipping,
+            gift_wrap_per_unit=gift_wrap,
+            scenario=Scenario.BELOW_MATERIALITY,
         )
-        correct = fees.commission_paise(category, principal, posted)
+        correct = fees.commission_paise(category, unit_price, quantity, posted)
         delta = self.rng.randint(2 * TOLERANCE_PAISE, MATERIALITY_FLOOR_PAISE - TOLERANCE_PAISE)
         self._sale_block(plan, posted, commission=correct + delta)
         plan.expected_amount = delta
@@ -946,7 +1173,7 @@ class _Builder:
         return blocks
 
     def _profile(self) -> SellerProfile:
-        if self.spec.count(Scenario.C1_GST_UNREGISTERED):
+        if self.gst_boundary is not None:
             gst = (
                 CapabilityFact(
                     GST_CAPABILITY, False, None, self.gst_boundary - timedelta(days=1)
@@ -965,8 +1192,8 @@ class _Builder:
         reserves = self._reserve_blocks()
         max_posted = max(b.posted for plan in self.orders for b in plan.blocks)
         max_posted = max(max_posted, *(b.posted for b in reserves))
-        if spec.as_of is None and max_posted != self.as_of:
-            raise AssertionError("as_of default must be the max posted-date")
+        if max_posted != self.as_of:
+            raise AssertionError("as_of must be the max posted-date")
 
         out_dir.mkdir(parents=True, exist_ok=True)
         line_ids: dict[tuple[str, str, str], str] = {}
@@ -1008,7 +1235,7 @@ class _Builder:
                     plan.order_id,
                     plan.sku,
                     plan.category_id,
-                    "1",
+                    str(plan.quantity),
                     str(plan.principal),
                     str(plan.tax),
                     plan.order_date.isoformat(),
@@ -1045,7 +1272,7 @@ class _Builder:
             (
                 plan.order_id,
                 requirement,
-                status,
+                status.value,
                 supplied_on.isoformat() if supplied_on else "",
             )
             for plan in ordered
@@ -1107,8 +1334,8 @@ class _Builder:
             files=files,
             materiality_floor_paise=MATERIALITY_FLOOR_PAISE,
             generator_version=(
-                f"{GENERATOR_NAME}; channel=Easy Ship; quantity=1; "
-                f"{fees.schedule_label(self.as_of)}"
+                f"{GENERATOR_NAME}; {fees.schedule_label(self.as_of)}; "
+                "class-1/2/5 amounts exclude fee GST; class-6 amount=principal+tax"
             ),
         )
         write_manifest(manifest, out_dir / v2.MANIFEST_FILE)
@@ -1118,7 +1345,3 @@ class _Builder:
 def generate(spec: BatchSpec, out_dir: Path) -> Manifest:
     """Write every input file for ``spec`` into ``out_dir`` and return the manifest."""
     return _Builder(spec).build(out_dir)
-
-
-def scenario_kind(scenario: Scenario) -> ScenarioKind:
-    return SCENARIOS[scenario].kind

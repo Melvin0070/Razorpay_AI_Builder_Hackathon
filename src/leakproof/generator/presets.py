@@ -16,22 +16,25 @@ DEMO_SEED: Final[int] = 2026
 MEASURE_SEEDS: Final[tuple[int, ...]] = (1, 2, 3, 4, 5)
 THROUGHPUT_SEED: Final[int] = 7
 
-#: The demo mix follows the wireframe's queue: a claim-ready commission overcharge
-#: to drill, a blocked GST-invoice claim to decline, and one of each blocker.
+#: The demo mix follows the wireframe's queue: claim-ready claims to drill (the
+#: class-5 one per ADR-0006), a blocked GST-invoice claim to decline, one of
+#: each blocker and exclusion, and the dispositions. Twenty seeded errors.
+#: ``C5_WINDOW_DATE_MISSING`` is left to the measure batch: its undated rows
+#: are quarantined, and the malformed preset is the demo's quarantine story.
 DEMO_COUNTS: Final[dict[Scenario, int]] = {
     Scenario.C1_PLAIN: 2,
-    Scenario.C1_INVOICE_PENDING: 1,
-    Scenario.C1_GST_UNREGISTERED: 1,
-    Scenario.C1_WINDOW_EXPIRED: 1,
-    Scenario.C1_ATOZ_EXCLUDED: 1,
     Scenario.C2_PLAIN: 1,
     Scenario.C2_SLAB_BOUNDARY: 1,
     Scenario.C5_PLAIN: 2,
     Scenario.C5_AWAITING_CYCLE: 2,
-    Scenario.C5_ATOZ: 1,
     Scenario.C5_SELLER_ISSUED: 1,
+    Scenario.C5_ATOZ: 1,
+    Scenario.C5_WINDOW_EXPIRED: 1,
+    Scenario.C5_GST_UNREGISTERED: 1,
+    Scenario.C5_INVOICE_PENDING: 1,
     Scenario.C6_PLAIN: 3,
     Scenario.C7_TCS_MISMATCH: 1,
+    Scenario.C7_TDS_MISMATCH: 1,
     Scenario.C8_CODE_UNSEEN: 1,
     Scenario.C8_CODE_KNOWN_NO_RULE: 1,
     Scenario.C5_REVERSED_LATER_CYCLE: 1,
@@ -78,16 +81,28 @@ def _clean(seed: int) -> BatchSpec:
 PRESETS: Final[dict[str, Preset]] = {
     "demo": Preset("demo", "150 orders, 20 seeded errors, 4 cycles", (DEMO_SEED,), _demo),
     "measure": Preset(
-        "measure", "500 orders, 20 errors per class x 6, seeds 1-5, 8 cycles", MEASURE_SEEDS, _measure
+        "measure",
+        "500 orders, 20 errors per class x 6, seeds 1-5, 8 cycles",
+        MEASURE_SEEDS,
+        _measure,
     ),
     "throughput": Preset(
-        "throughput", "10,000 orders seeded at the measure ratio", (THROUGHPUT_SEED,), _throughput
+        "throughput",
+        "10,000 orders seeded at the measure ratio",
+        (THROUGHPUT_SEED,),
+        _throughput,
     ),
     "malformed": Preset(
-        "malformed", "the demo batch with its last settlement file saved as CSV", (DEMO_SEED,), _malformed
+        "malformed",
+        "the demo batch with its last settlement file saved as CSV",
+        (DEMO_SEED,),
+        _malformed,
     ),
     "uncovered": Preset(
-        "uncovered", "every order in a category outside the declared three", (DEMO_SEED,), _uncovered
+        "uncovered",
+        "every order in a category outside the declared three",
+        (DEMO_SEED,),
+        _uncovered,
     ),
     "clean": Preset("clean", "no seeded errors, no material discrepancy", (DEMO_SEED,), _clean),
 }
@@ -104,4 +119,6 @@ def generate_preset(name: str, out_root: Path) -> tuple[Manifest, ...]:
     if name not in PRESETS:
         raise KeyError(f"unknown preset {name!r}; known: {', '.join(PRESETS)}")
     preset = PRESETS[name]
-    return tuple(generate(preset.spec(seed), preset_dir(out_root, name, seed)) for seed in preset.seeds)
+    return tuple(
+        generate(preset.spec(seed), preset_dir(out_root, name, seed)) for seed in preset.seeds
+    )

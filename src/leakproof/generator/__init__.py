@@ -1,13 +1,14 @@
 """Synthetic batches and manifest. Lane B · Tier A · issue #5.
 
 Governed by D9, D12, D18, D20, D3. Owns this package. Must not read
-ratecard/ or labels/; the D12 import test fails the build if this package's
-module graph reaches either.
+ratecard/, labels/, evidence/ or detect/; the D12 import test fails the build
+if this package's module graph reaches any of them.
 
 ``fees.py`` is this side's encoding of the public rate card, with every
-number's source and as-of date in its docstring; ``batch.py`` builds one
-batch from a ``BatchSpec``; ``presets.py`` names the batches the CLI
-generates; ``manifest.py`` reads the manifest back.
+number's source, as-of date and basis in its docstring; ``batch.py`` builds
+one batch from a ``BatchSpec``; ``presets.py`` names the batches the CLI
+generates; ``manifest.py`` reads the manifest back; ``v2.py`` writes the
+files; ``money.py`` formats paise.
 """
 
 from __future__ import annotations
@@ -49,8 +50,9 @@ def generate_batch(
 
     ``errors_per_class`` seeded errors per class, dealt over the class's
     scenarios; true negatives, dispositions and the duplicate credit come
-    with them (``default_scenario_counts``). ``as_of`` defaults to the batch's
-    maximum settlement posted-date (D18)."""
+    with them (``default_scenario_counts``). ``as_of`` is the date the batch
+    is cut: the last cycle ends on it, so it is also the batch's maximum
+    settlement posted-date, the D18 default."""
     spec = BatchSpec(
         batch_id=batch_id,
         seed=seed,

@@ -1,4 +1,4 @@
-"""Writers for the four input files, in the layouts ``docs/specs/amazon-settlement-v2.md``
+"""Writers for the input files, in the layouts ``docs/specs/amazon-settlement-v2.md``
 gives. The raw settlement vocabulary is written by inverting the contract
 tables, so lane D's parser and this writer agree by construction.
 
@@ -55,8 +55,9 @@ COLUMNS: Final[tuple[str, ...]] = (
 
 MARKETPLACE_NAME: Final[str] = "Amazon.in"
 CURRENCY: Final[str] = "INR"
-#: Merchant-fulfilled network: Easy Ship orders ship from the seller's premises.
-FULFILLMENT_ID: Final[str] = "MFN"
+#: Amazon-fulfilled network: the closing-fee schedule encoded in ``fees.py`` is
+#: the Fulfilment Centre one, so the rows say so. No seam type reads this column.
+FULFILLMENT_ID: Final[str] = "AFN"
 #: Reserve rows carry this literal in both transaction-type and amount-type
 #: (RS1 §2). It is outside ``contract.TransactionType``, so the parser keeps the
 #: raw string and classifies the row as OTHER; the kind (RESERVE) is what matters.
@@ -74,6 +75,9 @@ ORDERS_COLUMNS: Final[tuple[str, ...]] = (
     "refund_initiated_by",
 )
 BANK_COLUMNS: Final[tuple[str, ...]] = ("date", "utr", "amount", "narration")
+#: Proposed companion input, not yet in the spec (see the lane report): one row
+#: per seller-suppliable evidence item, ``status`` a ``contract.EvidenceStatus``
+#: value, ``supplied_on`` an ISO date or empty.
 EVIDENCE_COLUMNS: Final[tuple[str, ...]] = ("order_id", "requirement", "status", "supplied_on")
 
 ORDERS_FILE: Final[str] = "orders.csv"
@@ -132,7 +136,11 @@ class Line:
 @dataclass(frozen=True, slots=True)
 class Block:
     """A contiguous group of rows for one event on one order (or none, for a
-    reserve row): same transaction-type, order-id and posted date."""
+    reserve row): same transaction-type, order-id and posted date.
+
+    ``undated`` writes empty posted-date columns while keeping ``posted`` for
+    ordering and the cycle: the C5_WINDOW_DATE_MISSING shape, where the event
+    exists but no line carries a readable date."""
 
     txn_type: str  # raw transaction-type text
     order_id: str | None
@@ -146,6 +154,7 @@ class Block:
     shipment_id: str = ""
     order_item_code: str = ""
     adjustment_id: str = ""
+    undated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,10 +189,17 @@ def render_settlement(
     line_ids: dict[tuple[str, str, str], str] = {}
     total = 0
     for block in ordered:
+        posted_date = "" if block.undated else block.posted.isoformat()
+        posted_date_time = (
+            "" if block.undated else f"{block.posted.isoformat()} {block.posted_time} UTC"
+        )
         for line in block.lines:
             row = 3 + len(body)
             if block.order_id is not None:
-                line_ids[(block.order_id, block.tag, line.tag)] = make_line_id(file_name, row)
+                key = (block.order_id, block.tag, line.tag)
+                if key in line_ids:
+                    raise AssertionError(f"duplicate line tag {key}")
+                line_ids[key] = make_line_id(file_name, row)
             total += line.amount
             body.append(
                 (
@@ -203,8 +219,8 @@ def render_settlement(
                     line.description,
                     format_paise(line.amount),
                     FULFILLMENT_ID if block.order_id is not None else "",
-                    block.posted.isoformat(),
-                    f"{block.posted.isoformat()} {block.posted_time} UTC",
+                    posted_date,
+                    posted_date_time,
                     block.order_item_code,
                     "",
                     "",
