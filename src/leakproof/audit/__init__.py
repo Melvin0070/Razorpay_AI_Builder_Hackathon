@@ -112,9 +112,18 @@ class AuditLogCorruptError(ValueError):
     ``seq``/``prev_hash`` to continue from.
     """
 
-    def __init__(self, line_no: int, reason: str) -> None:
+    def __init__(self, line_no: int, reason: str, *, parsed: int) -> None:
         self.line_no = line_no
         self.reason = reason
+        #: Count of entries successfully parsed before this break (blank
+        #: lines are skipped by entries() and never counted here). This is
+        #: what verify_chain reports as ChainVerification.entries on this
+        #: path, and parsed + 1 is what it reports as first_bad_seq (C2:
+        #: those two used to be derived from line_no, which over-counts by
+        #: one per blank line silently skipped by entries(), and which names
+        #: a physical line number where first_bad_seq is documented to carry
+        #: a seq).
+        self.parsed = parsed
         super().__init__(
             f"audit log corrupt at line {line_no}: {reason}. The log is "
             "append-only and cannot be repaired in place — investigate "
@@ -295,6 +304,36 @@ def _resolve_artifact(artifacts_root: Path, artifact_path: str) -> tuple[Path | 
 
 @dataclass(frozen=True, slots=True)
 class ChainVerification:
+    """Result of :func:`verify_chain`. Every field's meaning is documented
+    here because ``entries``/``first_bad_seq`` mean subtly different things
+    depending on which check failed (C2) — read this before comparing them
+    across call sites.
+
+    ok:
+        Whether the whole chain verified with no problem found.
+    entries:
+        On a clean result, or a hash/prev_hash-linkage/seq/orphan-pack
+        failure: the total number of entries successfully parsed from the
+        file (every one of them WAS parseable; the failure, if any, is about
+        their content or ordering, not their JSON). On an unparseable-line
+        failure: the count of entries successfully parsed *before* the line
+        that broke — never the physical line number, and blank lines (which
+        ``entries()`` silently skips) are never counted either way.
+    first_bad_seq:
+        ``None`` on a clean result. On a hash/prev_hash/seq/orphan-pack
+        failure: the failing entry's own ``seq`` (read from that entry,
+        since it parsed fine). On an unparseable-line failure: no ``seq``
+        could be read from that line, so this is the ``seq`` that WOULD have
+        been expected next (``entries + 1``) — a seq number, never a
+        physical line number, even though the two often coincide when there
+        are no blank lines before the break.
+    detail:
+        Human-readable reason. Always names the physical line number for a
+        parse failure (``"line N unparseable: ..."``) and the ``seq`` for a
+        chain-integrity failure, so the physical line is never lost even
+        when ``first_bad_seq`` above cannot carry it.
+    """
+
     ok: bool
     entries: int
     first_bad_seq: int | None
@@ -358,7 +397,7 @@ class AuditLog:
         naming the exact physical line the moment a line fails to parse,
         rather than returning a partial result — a caller that wants the
         good entries before the break point should catch the error and read
-        ``exc.line_no`` (``verify_chain`` does exactly this).
+        ``exc.parsed`` (``verify_chain`` does exactly this).
 
         Opens and decodes in binary (``"rb"``, decoding each line explicitly)
         rather than opening with ``encoding="utf-8"`` and iterating text
@@ -373,7 +412,9 @@ class AuditLog:
         try:
             raw_fh = self.path.open("rb")
         except IsADirectoryError as exc:
-            raise AuditLogCorruptError(1, f"{self.path} is a directory, not a file") from exc
+            raise AuditLogCorruptError(
+                1, f"{self.path} is a directory, not a file", parsed=0
+            ) from exc
         with raw_fh as fh:
             for line_no, raw_bytes in enumerate(fh, start=1):
                 line = raw_bytes.strip()
@@ -382,7 +423,9 @@ class AuditLog:
                 try:
                     out.append(_entry_from_dict(json.loads(line.decode("utf-8"))))
                 except _PARSE_ERRORS as exc:
-                    raise AuditLogCorruptError(line_no, _describe_parse_error(exc)) from exc
+                    raise AuditLogCorruptError(
+                        line_no, _describe_parse_error(exc), parsed=len(out)
+                    ) from exc
         return tuple(out)
 
     def head(self) -> AuditEntry | None:
@@ -443,12 +486,15 @@ def verify_chain(path: Path, artifacts_root: Path | None = None) -> ChainVerific
     except AuditLogCorruptError as exc:
         # A line that cannot even be parsed is reported like any other
         # verification failure — never a raised exception (see module
-        # docstring) — naming the physical line, which is also the seq that
-        # line was expected to carry under normal one-entry-per-line usage.
+        # docstring). entries/first_bad_seq count parsed entries and the seq
+        # that would have come next, NOT the physical line number (C2): a
+        # blank line before the break is skipped by entries() and must not
+        # inflate either count. The physical line number is still named in
+        # detail, since that is what a human needs to go look at the file.
         return ChainVerification(
             ok=False,
-            entries=exc.line_no - 1,
-            first_bad_seq=exc.line_no,
+            entries=exc.parsed,
+            first_bad_seq=exc.parsed + 1,
             detail=f"line {exc.line_no} unparseable: {exc.reason}",
         )
 

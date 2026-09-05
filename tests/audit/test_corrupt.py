@@ -141,6 +141,29 @@ def test_truncated_mid_multibyte_char_fails_gate_and_append_without_raising(tmp_
     assert excinfo.value.line_no == 3
 
 
+def test_corrupt_with_blank_lines_reports_seq_not_physical_line(tmp_path):
+    """C2: entries/first_bad_seq must report the count of parsed entries
+    and the seq that would have come next, never the physical line number --
+    a blank line before the break (silently skipped by entries()) must not
+    inflate either. Two real entries, two blank physical lines, then garbage
+    at physical line 5: before the fix this reported entries=4,
+    first_bad_seq=5 (both derived from line_no), naming a seq that would
+    actually have been 3."""
+    path = tmp_path / "audit.jsonl"
+    log = AuditLog(path)
+    append_sample(log, "2026-08-21T10:00:00Z")
+    append_sample(log, "2026-08-21T10:00:01Z")
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write("\n\n")  # blank physical lines 3 and 4, silently skipped
+        fh.write("not json at all {{{\n")  # physical line 5
+
+    result = verify_chain(path)
+    assert not result.ok
+    assert result.entries == 2, "two real entries parsed before the break"
+    assert result.first_bad_seq == 3, "the seq that would have been assigned next"
+    assert result.detail.startswith("line 5 unparseable:"), "physical line stays in detail"
+
+
 def test_log_path_is_a_directory_fails_gate_without_raising(tmp_path):
     """C1: the log path itself being a directory used to raise a bare
     IsADirectoryError out of _read_tail_line_fast (opening it "rb") and out
