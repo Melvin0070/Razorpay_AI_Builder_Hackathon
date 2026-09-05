@@ -27,8 +27,10 @@ Concurrency caps: at most six lanes per wave, at most two `lp-core` lanes at onc
 ## Decisions carried into every Wave 1 and Wave 2 brief (from the Wave 0 research)
 
 - **Category identifiers are pinned to one Amazon.in fee-category node each**
-  (`contract.CATEGORY_NODES`): `electronics-accessories` → "Electronics
-  Accessories"; `home-kitchen` → "Kitchen - Cookware, Tableware & Dinnerware";
+  (`contract.CATEGORY_NODES`): `electronics-accessories` → "Accessories -
+  Electronics, PC and Wireless" (corrected 2026-09-04: no node named "Electronics
+  Accessories" exists on the live page, RS3 §1 was wrong on that name; lanes B and
+  C confirmed); `home-kitchen` → "Kitchen - Cookware, Tableware & Dinnerware";
   `apparel` → "Apparel - Shirts". Lanes B and C encode that node's own tiers,
   never an umbrella (RS3 §1).
 - **Three 2026 fee effective dates exist**: March 16, June 10, September 7.
@@ -40,10 +42,15 @@ Concurrency caps: at most six lanes per wave, at most two `lp-core` lanes at onc
   disagree, both encode the **shortest** figure, mark it `verified: false`,
   and record the alternatives (in the label rationale, in the rule docstring).
   Same tie-break, independent readings.
-- **If the SAFE-T sources indicate fee overcharges (classes 1 and 2) are not
-  SAFE-T-shaped at all**, F and K say so in their reports instead of forcing a
-  label or rule. The integrator then decides whether `PRIMARY_MECHANISM` for
-  class 1 moves to support-ticket and the demo drills a class-5 claim instead.
+- **Fee overcharges are not SAFE-T-shaped; decided 2026-09-05 (ADR-0006).**
+  Lane F's reading of the primary pages and its reviewer's independent check
+  both landed there, and a commission overcharge on an un-refunded sale has no
+  return event to start a window from. `PRIMARY_MECHANISM` for class 1 is now
+  `SUPPORT_TICKET` with no filing window; the SAFE-T-shaped class-1 scenarios
+  moved to class 5 (`C5_WINDOW_EXPIRED`, `C5_WINDOW_DATE_MISSING`,
+  `C5_GST_UNREGISTERED`, `C5_INVOICE_PENDING`) and the two duplicate exclusion
+  scenarios were deleted. The demo drills a class-5 claim. Lane K writes SAFE-T
+  eligibility and window rules for class 5 only.
 - **Refund fee terminology**: the India term is "Refund Commission"; the US
   "Refund Administration Fee" is a different mechanism (RS3 §5). Cite the
   India forum post RS3 names when the Help Hub page is login-walled.

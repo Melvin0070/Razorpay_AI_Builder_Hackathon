@@ -27,14 +27,8 @@ class ScenarioKind(StrEnum):
 
 
 class Scenario(StrEnum):
-    # class 1 — commission overcharge
+    # class 1 — commission overcharge (support ticket, no filing window; ADR-0006)
     C1_PLAIN = "C1_PLAIN"
-    C1_WINDOW_EXPIRED = "C1_WINDOW_EXPIRED"
-    C1_WINDOW_DATE_MISSING = "C1_WINDOW_DATE_MISSING"
-    C1_GST_UNREGISTERED = "C1_GST_UNREGISTERED"
-    C1_ATOZ_EXCLUDED = "C1_ATOZ_EXCLUDED"
-    C1_SELLER_REFUND_EXCLUDED = "C1_SELLER_REFUND_EXCLUDED"
-    C1_INVOICE_PENDING = "C1_INVOICE_PENDING"
     # class 2 — fixed / closing fee
     C2_PLAIN = "C2_PLAIN"
     C2_SLAB_BOUNDARY = "C2_SLAB_BOUNDARY"
@@ -43,6 +37,10 @@ class Scenario(StrEnum):
     C5_AWAITING_CYCLE = "C5_AWAITING_CYCLE"
     C5_SELLER_ISSUED = "C5_SELLER_ISSUED"
     C5_ATOZ = "C5_ATOZ"
+    C5_WINDOW_EXPIRED = "C5_WINDOW_EXPIRED"
+    C5_WINDOW_DATE_MISSING = "C5_WINDOW_DATE_MISSING"
+    C5_GST_UNREGISTERED = "C5_GST_UNREGISTERED"
+    C5_INVOICE_PENDING = "C5_INVOICE_PENDING"
     C5_REVERSED_LATER_CYCLE = "C5_REVERSED_LATER_CYCLE"
     # class 6 — unpaid order past cycle
     C6_PLAIN = "C6_PLAIN"
@@ -78,36 +76,6 @@ SCENARIOS: Final[dict[Scenario, ScenarioMeta]] = {
         _C.COMMISSION_OVERCHARGE,
         "Commission charged above the rate-card percentage; every evidence item satisfiable.",
     ),
-    Scenario.C1_WINDOW_EXPIRED: ScenarioMeta(
-        _K.SEEDED_ERROR,
-        _C.COMMISSION_OVERCHARGE,
-        "Commission overcharge whose SAFE-T filing window has already closed at as_of.",
-    ),
-    Scenario.C1_WINDOW_DATE_MISSING: ScenarioMeta(
-        _K.SEEDED_ERROR,
-        _C.COMMISSION_OVERCHARGE,
-        "Commission overcharge where the window's start date cannot be read from any line.",
-    ),
-    Scenario.C1_GST_UNREGISTERED: ScenarioMeta(
-        _K.SEEDED_ERROR,
-        _C.COMMISSION_OVERCHARGE,
-        "Commission overcharge on a seller whose profile says not GST-registered; the tax invoice can never exist.",
-    ),
-    Scenario.C1_ATOZ_EXCLUDED: ScenarioMeta(
-        _K.SEEDED_ERROR,
-        _C.COMMISSION_OVERCHARGE,
-        "Commission overcharge on an order that later carried an A-to-z Guarantee refund.",
-    ),
-    Scenario.C1_SELLER_REFUND_EXCLUDED: ScenarioMeta(
-        _K.SEEDED_ERROR,
-        _C.COMMISSION_OVERCHARGE,
-        "Commission overcharge on an order the seller refunded themselves.",
-    ),
-    Scenario.C1_INVOICE_PENDING: ScenarioMeta(
-        _K.SEEDED_ERROR,
-        _C.COMMISSION_OVERCHARGE,
-        "Commission overcharge on a GST-registered seller who has not yet supplied the tax invoice.",
-    ),
     Scenario.C2_PLAIN: ScenarioMeta(
         _K.SEEDED_ERROR,
         _C.FIXED_FEE_ERROR,
@@ -137,6 +105,26 @@ SCENARIOS: Final[dict[Scenario, ScenarioMeta]] = {
         _K.SEEDED_ERROR,
         _C.REFUND_NO_FEE_REVERSAL,
         "Missing fee reversal on an A-to-z Guarantee refund.",
+    ),
+    Scenario.C5_WINDOW_EXPIRED: ScenarioMeta(
+        _K.SEEDED_ERROR,
+        _C.REFUND_NO_FEE_REVERSAL,
+        "Missing fee reversal whose SAFE-T filing window has already closed at as_of.",
+    ),
+    Scenario.C5_WINDOW_DATE_MISSING: ScenarioMeta(
+        _K.SEEDED_ERROR,
+        _C.REFUND_NO_FEE_REVERSAL,
+        "Missing fee reversal where the window's start date cannot be read from any line.",
+    ),
+    Scenario.C5_GST_UNREGISTERED: ScenarioMeta(
+        _K.SEEDED_ERROR,
+        _C.REFUND_NO_FEE_REVERSAL,
+        "Missing fee reversal on a seller whose profile says not GST-registered; the tax invoice can never exist.",
+    ),
+    Scenario.C5_INVOICE_PENDING: ScenarioMeta(
+        _K.SEEDED_ERROR,
+        _C.REFUND_NO_FEE_REVERSAL,
+        "Missing fee reversal on a GST-registered seller who has not yet supplied the tax invoice.",
     ),
     Scenario.C5_REVERSED_LATER_CYCLE: ScenarioMeta(
         _K.TRUE_NEGATIVE,
