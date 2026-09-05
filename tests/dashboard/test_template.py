@@ -9,6 +9,7 @@ import re
 from datetime import date
 
 from leakproof.contract import (
+    AuditAction,
     ErrorClass,
     EvidenceSource,
     EvidenceStatus,
@@ -30,6 +31,7 @@ from leakproof.types import (
     EligibilityCheck,
     EvidenceItem,
     Finding,
+    GateRecord,
     MatchRates,
     RupeeLines,
     StateResult,
@@ -253,4 +255,24 @@ def test_finding_subline_omits_missing_sku_and_category():
     assert "Order O-2 · home-kitchen" in html
     assert "SKU  ·" not in html
     assert "Order O-3 · SKU SKU-1</div>" in html
+
+
+# --------------------------------------------------------------------------- #
+# Finding 8: the approved block must not assume artifact_path ends in "/".
+# --------------------------------------------------------------------------- #
+
+
+def test_approved_block_joins_artifact_path_without_assuming_a_trailing_slash():
+    """The fixture's own ``GateRecord.artifact_path`` happens to end in "/",
+    which is what let ``f"{path}cited_rows.csv"`` pass before -- a future
+    artifact_path that doesn't end in "/" would have produced
+    "claims/E-042cited_rows.csv" with no separator at all."""
+    gate = GateRecord(
+        AuditAction.APPROVE, audit_seq=7, state_before=State.CLAIM_READY, artifact_path="claims/E-1"
+    )
+    row = _triaged(_finding(), gate=gate)
+    html = render(_report((row,)), mode="static")
+    assert "claims/E-1/cited_rows.csv" in html
+    assert "claims/E-1/recomputation.csv" in html
+    assert "claims/E-1cited_rows.csv" not in html
     assert "SKU-1 · </div>" not in html
