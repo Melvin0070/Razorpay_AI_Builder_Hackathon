@@ -641,7 +641,10 @@ def _boundary_box(report: BatchReport, kind: str) -> str:
 def _boundary_zero(report: BatchReport) -> str:
     r = report.rupee_lines
     floor = format_rupees(MATERIALITY_FLOOR_PAISE)
-    checked = oxford_join([class_label(c) for c in ErrorClass])
+    # "; " because class 5's own label ("Refund, fee not reversed") carries
+    # a comma; joining the list on commas too would read as a longer,
+    # wrongly-split list (finding 12).
+    checked = oxford_join([class_label(c) for c in ErrorClass], sep="; ")
     return (
         '<div class="emptybox"><div class="headline">'
         f"<b>{report.order_count} orders reconciled. No discrepancies above {floor}.</b>"

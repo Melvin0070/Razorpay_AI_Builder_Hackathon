@@ -62,6 +62,11 @@ def test_zero_exceptions_strip_still_renders_and_names_what_was_checked():
     assert "₹212" in html  # below-materiality amount
     for label in ("Commission overcharge", "Closing fee error", "Unclassified deduction"):
         assert label.lower() in html.lower()
+    # finding 12: class 5's own label has an internal comma ("Refund, fee
+    # not reversed"); the "Checked: ..." list must join on semicolons so
+    # that comma doesn't read as a list boundary.
+    assert "Refund, fee not reversed; " in html or "Refund, fee not reversed." in html
+    assert "Refund, fee not reversed, " not in html
     assert "<table>" not in html  # no queue table when the queue is empty
     assert "<button" not in html
 

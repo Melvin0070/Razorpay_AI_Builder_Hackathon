@@ -186,14 +186,19 @@ FILTER_LABELS: dict[State, str] = {
 }
 
 
-def oxford_join(items: list[str]) -> str:
+def oxford_join(items: list[str], *, sep: str = ", ") -> str:
+    """Oxford-comma join. ``sep`` defaults to a comma, but callers whose
+    items can themselves contain a comma (e.g. the class-5 label "Refund,
+    fee not reversed" in the zero-exceptions "Checked: ..." sentence,
+    finding 12) should pass ``sep="; "`` so the list boundary stays
+    unambiguous."""
     if not items:
         return ""
     if len(items) == 1:
         return items[0]
     if len(items) == 2:
         return f"{items[0]} and {items[1]}"
-    return ", ".join(items[:-1]) + f", and {items[-1]}"
+    return sep.join(items[:-1]) + f"{sep.rstrip()} and {items[-1]}"
 
 
 def named_blocker(reason: str) -> str:

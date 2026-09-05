@@ -136,6 +136,16 @@ def test_oxford_join():
     assert oxford_join(["a", "b", "c"]) == "a, b, and c"
 
 
+def test_oxford_join_semicolon_separator_for_items_with_internal_commas():
+    """finding 12: an item that itself contains a comma (e.g. the class-5
+    label "Refund, fee not reversed") must not be joined on commas, or the
+    list reads as having one more entry than it does."""
+    items = ["Commission overcharge", "Refund, fee not reversed", "TCS/TDS mismatch"]
+    assert oxford_join(items, sep="; ") == (
+        "Commission overcharge; Refund, fee not reversed; and TCS/TDS mismatch"
+    )
+
+
 CITE_UNVERIFIED = Citation("SAFE-T policy", "https://example.com", date(2026, 8, 20), False)
 
 
