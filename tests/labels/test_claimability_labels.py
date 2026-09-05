@@ -299,3 +299,11 @@ def test_the_window_tie_break_is_recorded_in_the_file(raw):
     # Sources disagree on the SAFE-T filing window; the alternatives have to
     # survive the freeze, not just the report that accompanied it.
     assert raw["window_tie_break"].strip()
+
+
+def test_the_verified_flag_rule_is_recorded_in_the_file(raw):
+    # Gap F8: every citation carries a verified flag and several are false on
+    # purpose. The rule that decides which is which is the only thing that makes
+    # a false flag readable as a judgement rather than an omission, so it has to
+    # survive the freeze in the file, exactly as window_tie_break does.
+    assert raw["verified_flag_rule"].strip()
