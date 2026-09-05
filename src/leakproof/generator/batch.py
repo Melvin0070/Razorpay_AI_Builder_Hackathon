@@ -17,8 +17,9 @@ Timeline conventions (all relative to the cycles, never to a clock):
   file is ``settlement_<end-date>.txt`` and its bank credit lands
   ``DEPOSIT_LAG_DAYS`` after the cycle end. Every settlement pays out:
   ordinary sales are steered to whichever cycle the seeded refunds have
-  pushed below ``NET_MARGIN_PAISE``, and a spec too small to cover them is
-  refused with a ``ValueError`` naming the cycle.
+  pushed below ``NET_MARGIN_PAISE``, an ordinary refund is posted only where
+  the cycle can absorb it, and a spec too small to cover its seeded refunds
+  is refused with a ``ValueError`` naming the cycle.
 * ``as_of`` is the batch's maximum posted-date by construction (D18): the
   reserve row posted on the last cycle's end date pins it there, and an
   explicit ``as_of`` moves the whole timeline so the last cycle ends on it.
@@ -616,6 +617,23 @@ class _Builder:
         """The refund event. ``reverse=False`` omits the commission reversal
         and its GST: the class-5 shape."""
         cycle = self._cycle_for(posted)
+        block = v2.Block(
+            txn_type,
+            plan.order_id,
+            plan.sku,
+            plan.quantity,
+            posted,
+            self._posted_time(),
+            cycle.index,
+            "refund",
+            self._refund_lines(plan, reverse=reverse),
+            shipment_id=plan.shipment_id,
+            order_item_code=plan.order_item_code,
+            undated=undated,
+        )
+        return self._post(plan, block)
+
+    def _refund_lines(self, plan: OrderPlan, *, reverse: bool) -> tuple[v2.Line, ...]:
         charged = plan.commission_charged
         refund_fee = fees.refund_commission_paise(charged)
         lines = [
@@ -633,21 +651,7 @@ class _Builder:
             lines.append(v2.Line(*_REFUND_FEE, -refund_fee, "refund_commission"))
         if fee_tax:
             lines.append(v2.Line(*_FEE_TAX, fee_tax, "fee_tax"))
-        block = v2.Block(
-            txn_type,
-            plan.order_id,
-            plan.sku,
-            plan.quantity,
-            posted,
-            self._posted_time(),
-            cycle.index,
-            "refund",
-            tuple(lines),
-            shipment_id=plan.shipment_id,
-            order_item_code=plan.order_item_code,
-            undated=undated,
-        )
-        return self._post(plan, block)
+        return tuple(lines)
 
     def _reversal_block(self, plan: OrderPlan, posted: date) -> v2.Block:
         """A commission reversal posted on its own in a later cycle."""
@@ -740,10 +744,16 @@ class _Builder:
         self._sale_block(plan, posted, promotion=promotion)
         if posted < self.last.end and self.rng.random() < 0.08:
             seller_issued = self.rng.random() < 0.3
-            plan.refund_initiated_by = (
-                RefundInitiator.SELLER if seller_issued else RefundInitiator.AMAZON
-            )
-            self._refund_block(plan, self._date_in(posted + timedelta(days=1), self.last.end))
+            refund_on = self._date_in(posted + timedelta(days=1), self.last.end)
+            # Posted only where that cycle can absorb it: a refund pulled from
+            # a later cycle than its sale is the one thing no later order is
+            # guaranteed to cover, and a settlement must pay out.
+            pullback = sum(line.amount for line in self._refund_lines(plan, reverse=True))
+            if self.net[self._cycle_for(refund_on).index] + pullback >= NET_MARGIN_PAISE:
+                plan.refund_initiated_by = (
+                    RefundInitiator.SELLER if seller_issued else RefundInitiator.AMAZON
+                )
+                self._refund_block(plan, refund_on)
         if category not in fees.COVERED_CATEGORIES:
             plan.scenario = Scenario.UNCOVERED_CATEGORY
             plan.cites = (("sale", "principal"),)
@@ -1260,7 +1270,7 @@ class _Builder:
                 raise ValueError(
                     f"settlement {cycle.settlement_id} ({cycle.file_name}) totals "
                     f"{format_paise(rendered.total)}: order_count {spec.order_count} is too "
-                    f"small to cover the refunds seeded in that cycle; raise order_count or "
+                    f"small to cover the refunds posted in that cycle; raise order_count or "
                     f"lower the scenario counts"
                 )
             malformed = spec.malformed_last_settlement and cycle is self.last

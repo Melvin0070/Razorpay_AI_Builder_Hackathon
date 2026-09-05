@@ -74,6 +74,23 @@ def test_reserve_rows_close_every_cycle(demo: Batch):
         previous = current[0].amount
 
 
+def _check_invariants(out: Path, manifest, order_count: int, errors_per_class: int) -> None:
+    assert load_manifest(out / v2.MANIFEST_FILE) == manifest
+    batch = Batch(out, manifest)
+    _check_totals(batch)
+    _check_bank(batch)
+    posted = [r.posted for r in batch.all_rows() if r.posted is not None]
+    assert manifest.as_of == max(posted) == manifest.coverage.end
+    assert manifest.order_count == order_count == len(batch.orders())
+    seeded = [e for e in manifest.seeded if SCENARIOS[e.scenario].kind is ScenarioKind.SEEDED_ERROR]
+    assert len(seeded) == 6 * errors_per_class
+    for entry in seeded:
+        assert entry.expected_amount_paise >= 2 * MATERIALITY_FLOOR_PAISE
+    for entry in manifest.seeded:
+        for line_id in entry.line_ids:
+            assert batch.row(line_id)
+
+
 @settings(max_examples=30, deadline=None)
 @given(
     seed=st.integers(min_value=0, max_value=10**6),
@@ -83,31 +100,46 @@ def test_reserve_rows_close_every_cycle(demo: Batch):
 def test_batch_invariants_hold_for_arbitrary_specs(
     seed: int, order_count: int, errors_per_class: int
 ):
+    """Any spec either yields a batch satisfying every invariant or is refused
+    by name; nothing in between (an assertion, a negative payout) is allowed."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        try:
+            manifest = generate_batch(
+                batch_id="prop",
+                seed=seed,
+                order_count=order_count,
+                errors_per_class=errors_per_class,
+                out_dir=out,
+            )
+        except ValueError as refused:
+            assert "too small to cover the refunds" in str(refused)
+            return
+        _check_invariants(out, manifest, order_count, errors_per_class)
+
+
+@settings(max_examples=25, deadline=None, derandomize=True)
+@given(
+    seed=st.integers(min_value=0, max_value=10**6),
+    errors_per_class=st.integers(min_value=0, max_value=3),
+    extra_orders=st.integers(min_value=0, max_value=80),
+)
+def test_generous_specs_are_never_refused(seed: int, errors_per_class: int, extra_orders: int):
+    """Sixty ordinary orders plus forty per seeded error per class always
+    cover the refunds the scenarios concentrate in the last cycles.
+    Derandomized so the examples, and therefore the verdict, never change
+    between runs."""
+    order_count = 60 + 40 * errors_per_class + extra_orders
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp)
         manifest = generate_batch(
-            batch_id="prop",
+            batch_id="generous",
             seed=seed,
             order_count=order_count,
             errors_per_class=errors_per_class,
             out_dir=out,
         )
-        assert load_manifest(out / v2.MANIFEST_FILE) == manifest
-        batch = Batch(out, manifest)
-        _check_totals(batch)
-        _check_bank(batch)
-        posted = [r.posted for r in batch.all_rows() if r.posted is not None]
-        assert manifest.as_of == max(posted) == manifest.coverage.end
-        assert manifest.order_count == order_count == len(batch.orders())
-        seeded = [
-            e for e in manifest.seeded if SCENARIOS[e.scenario].kind is ScenarioKind.SEEDED_ERROR
-        ]
-        assert len(seeded) == 6 * errors_per_class
-        for entry in seeded:
-            assert entry.expected_amount_paise >= 2 * MATERIALITY_FLOOR_PAISE
-        for entry in manifest.seeded:
-            for line_id in entry.line_ids:
-                assert batch.row(line_id)
+        _check_invariants(out, manifest, order_count, errors_per_class)
 
 
 def test_a_spec_whose_refunds_no_sale_can_cover_is_refused_by_name(tmp_path: Path):
