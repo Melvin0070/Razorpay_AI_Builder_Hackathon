@@ -2,14 +2,21 @@
 
 Things that are provably right or wrong fail the build here. Measured things
 (recall, precision, match rate) are published by lane N and gate nothing.
-Lanes implement gate callables inside their own packages; the integrator
-registers them in ``HARD_GATES`` at merge.
+
+Lanes implement gate callables inside their own packages. **They are registered
+in ``cli.py``, not here.** This module is imported by walled packages (a lane
+needs ``GateResult`` to type its own gate), so importing a lane package here
+would make every walled package transitively reach it and fail the D12 wall
+test — ``tests/test_anticircularity.py`` asserts this module stays wall-neutral.
+``cli.py`` is imported by nothing, which is what makes it the composition root
+(lane C, Wave 1).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Final
 
 from leakproof import contract as c
 
@@ -43,8 +50,10 @@ def contract_self_check() -> GateResult:
     )
 
 
-HARD_GATES: list[Gate] = [contract_self_check]
+#: Gates that depend on nothing but this package. ``cli.hard_gates()`` extends
+#: it with the lane gates as those lanes merge.
+BASE_GATES: Final[tuple[Gate, ...]] = (contract_self_check,)
 
 
-def run_hard_gates() -> list[GateResult]:
-    return [gate() for gate in HARD_GATES]
+def run_hard_gates(gates: Sequence[Gate] = BASE_GATES) -> list[GateResult]:
+    return [gate() for gate in gates]
