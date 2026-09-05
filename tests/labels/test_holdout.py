@@ -1,4 +1,4 @@
-"""D12: the 25-case adversarial holdout. These tests check the fixtures are
+"""D12: the 26-case adversarial holdout. These tests check the fixtures are
 well-formed and self-consistent; the pipeline is scored against them by lane N,
 as its own published line."""
 

@@ -192,7 +192,7 @@ def load_labels(path: Path | None = None) -> dict[Scenario, ClaimabilityLabel]:
 
 
 def load_holdout() -> tuple[HoldoutCase, ...]:
-    """The 25-case adversarial holdout (D12). Imported lazily so that reading a
+    """The 26-case adversarial holdout (D12). Imported lazily so that reading a
     label never pays for building the fixtures."""
     from leakproof.labels.holdout.cases import load_holdout as _load
 
