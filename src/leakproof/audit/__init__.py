@@ -149,17 +149,34 @@ class AuditLogCorruptError(ValueError):
         )
 
 
-#: Default read-window size for _read_tail_line_fast's backward scan. Tests
-#: pass a small value to exercise the multi-chunk loop without a huge fixture.
+#: Ceiling for _read_tail_line_fast's backward-read window. Tests pass a
+#: small value here (as chunk_size) to exercise the multi-chunk loop without
+#: a huge fixture.
 _DEFAULT_TAIL_CHUNK_SIZE: Final[int] = 65536
+
+#: First backward-read window, before doubling up to chunk_size. A real
+#: log's last line is on the order of a few hundred bytes, so almost every
+#: call finds it in this one small window instead of paying for the full
+#: chunk_size ceiling every time (C3: measured 34880/50208/57873 bytes read
+#: per append at n=200/400/800 before this constant existed, converging on
+#: the 64 KiB ceiling because a fixed-size window reads the whole window
+#: even when the line it is looking for is far smaller).
+_INITIAL_TAIL_WINDOW: Final[int] = 4096
 
 
 def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SIZE) -> str | None:
     """Read only the last newline-terminated line of ``path``, seeking from
-    the end and growing the read window a chunk at a time — used by
-    ``AuditLog.head`` to avoid parsing every earlier line just to find the
+    the end and growing the read window (doubling, capped at ``chunk_size``,
+    starting from ``_INITIAL_TAIL_WINDOW``) until a newline is found — used
+    by ``AuditLog.head`` to avoid parsing every earlier line just to find the
     current head, which used to make a whole log's worth of appends cost
     O(n^2) (each of n appends re-parsed all entries so far to find the tail).
+    This is NOT a single minimal-sized read: on a typical short last line it
+    reads the first ``_INITIAL_TAIL_WINDOW`` bytes (still comfortably more
+    than one line) and stops there; only an unusually long last line grows
+    the window further, up to ``chunk_size``. The cost is bounded and
+    independent of how many entries already exist in the file (constant, not
+    quadratic) — the actual property ``head()``/``append()`` need.
 
     Returns ``None`` when it cannot confidently identify a complete last
     line: an empty file, a file whose last byte is not a newline (a write
@@ -182,8 +199,9 @@ def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SI
             return None
         chunk = b""
         pos = size
+        window = min(_INITIAL_TAIL_WINDOW, chunk_size)
         while pos > 0:
-            step = min(chunk_size, pos)
+            step = min(window, pos)
             pos -= step
             fh.seek(pos)
             chunk = fh.read(step) + chunk
@@ -194,6 +212,7 @@ def _read_tail_line_fast(path: Path, *, chunk_size: int = _DEFAULT_TAIL_CHUNK_SI
                     return body[idx + 1 :].decode("utf-8")
                 except UnicodeDecodeError:
                     return None
+            window = min(window * 2, chunk_size)
     return None  # unreachable: the loop above always returns once pos == 0
 
 
@@ -456,13 +475,13 @@ class AuditLog:
 
     def head(self) -> AuditEntry | None:
         """The last entry, or ``None`` for an empty/absent log. Reads a
-        bounded first window from the end of the file (see
-        ``_read_tail_line_fast`` — up to 64 KiB, ``min(chunk_size, size)``)
-        to recover what is typically a ~300-500 byte line, rather than
-        parsing every earlier line, so the cost is constant, independent of
-        how many entries already exist — NOT literally "read only the last
-        line": it reads a window sized to comfortably contain one, not a
-        minimal exact-line read. Falls back to the accurate, fully-parsed
+        bounded window from the end of the file (see ``_read_tail_line_fast``
+        — starting small and doubling, capped at 64 KiB) to recover what is
+        typically a ~300-500 byte line, rather than parsing every earlier
+        line, so the cost is constant, independent of how many entries
+        already exist — NOT literally "read only the last line": it reads a
+        window sized to comfortably contain one, not a minimal exact-line
+        read. Falls back to the accurate, fully-parsed
         ``entries()`` (which raises :class:`AuditLogCorruptError` naming the
         exact line) whenever the fast tail read cannot confidently parse a
         complete last line — that fallback only runs on the rare corrupt-log
