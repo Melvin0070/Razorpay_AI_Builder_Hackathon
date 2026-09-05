@@ -80,9 +80,17 @@ TRAILING_TAB_HINT = (
     "Amazon Settlement Flat File V2 has 24 tab-separated columns"
 )
 
-#: S7: row 2 carries a non-empty ``transaction-type``, so it is a transaction
-#: row, not the summary -- the summary row itself is missing from the file.
+#: S7: row 2 carries a non-empty ``transaction-type`` *and* ``amount`` (two
+#: tells, G7 -- the spec marks this row-2 layout ``verified: false`` and a
+#: single non-empty field is too weak a signal on an unconfirmed layout), so
+#: it is a transaction row, not the summary -- the summary row itself is
+#: missing from the file.
 SUMMARY_ROW_MISSING_HINT = "summary row missing: row 2 is a transaction row"
+
+#: G4: row 2 is blank (or the file ends after the header) -- the summary
+#: total is missing just as surely as the S7 case above, but nothing here
+#: *looks* like a transaction row to blame.
+SUMMARY_ROW_BLANK_HINT = "summary row missing: row 2 is blank"
 
 
 def _header_missing_hint() -> str:
@@ -218,15 +226,20 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
         )
 
     # Row 2: is it really the summary row, or (S7) a transaction row because
-    # the summary is missing from the file? A non-empty transaction-type in
-    # what should be an all-blank-but-for-five-fields summary row is the tell.
+    # the summary is missing from the file? Two tells (G7, since this row-2
+    # layout is spec ``verified: false``): a non-empty transaction-type *and*
+    # a non-empty amount, both of which a genuine summary row leaves blank.
     row2_raw = rows[1] if len(rows) >= 2 else None
-    row2_blank = row2_raw is not None and _is_blank(row2_raw)
-    row2_bad_utf8 = row2_raw is not None and not row2_blank and _has_undecodable_bytes(row2_raw)
+    row2_missing = row2_raw is None or _is_blank(row2_raw)
+    row2_bad_utf8 = row2_raw is not None and not row2_missing and _has_undecodable_bytes(row2_raw)
     row2_is_transaction = False
-    if row2_raw is not None and not row2_blank and not row2_bad_utf8:
+    if row2_raw is not None and not row2_missing and not row2_bad_utf8:
         row2_fields = row2_raw.split("\t")
-        if len(row2_fields) >= 7 and row2_fields[6].strip() != "":
+        if (
+            len(row2_fields) >= 15
+            and row2_fields[6].strip() != ""
+            and row2_fields[14].strip() != ""
+        ):
             row2_is_transaction = True
 
     summary_missing_hint: str | None = None
@@ -234,7 +247,15 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
     if row2_is_transaction:
         summary_missing_hint = SUMMARY_ROW_MISSING_HINT
         transaction_slice = list(enumerate(rows[1:], start=2))
-    elif row2_raw is not None and not row2_blank and not row2_bad_utf8:
+    elif row2_missing:
+        # G4: row 2 itself is blank, or the file has fewer than two rows --
+        # the total is lost exactly as under S7, but row 2 is skipped by the
+        # ordinary blank-line rule (S6) rather than quarantined, so only the
+        # hint can say why ``header`` came back None.
+        summary_missing_hint = SUMMARY_ROW_BLANK_HINT
+        transaction_slice = list(enumerate(rows[1:], start=2))
+    elif not row2_bad_utf8:
+        assert row2_raw is not None
         summary_fields = row2_raw.split("\t")
         summary_amount_raw = summary_fields[4] if len(summary_fields) >= 5 else None
         transaction_slice = list(enumerate(rows[2:], start=3))
@@ -247,7 +268,7 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
     )
 
     header: SettlementHeader | None = None
-    if not row2_is_transaction and row2_raw is not None and not row2_blank:
+    if not row2_is_transaction and not row2_missing:
         if row2_bad_utf8:
             quarantined.append(
                 QuarantinedRow(line_id=make_line_id(source_file, 2), reason=NOT_VALID_UTF8)

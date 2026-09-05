@@ -25,6 +25,7 @@ from leakproof.ingest.reasons import (
 from leakproof.ingest.settlement import (
     CSV_HINT,
     SETTLEMENT_COLUMNS,
+    SUMMARY_ROW_BLANK_HINT,
     SUMMARY_ROW_MISSING_HINT,
     TRAILING_TAB_HINT,
     parse_settlement_file,
@@ -574,6 +575,56 @@ def test_missing_summary_row_parses_every_row_from_two_onward_as_a_transaction(t
     assert len(result.lines) == 2
     assert result.lines[0].line_id == f"{path.name}:2"
     assert result.lines[1].line_id == f"{path.name}:3"
+
+
+def test_row2_transaction_tell_requires_both_transaction_type_and_amount(tmp_path):
+    """G7: a non-empty transaction-type alone is too weak a tell on a
+    spec-unverified row-2 layout. A row with transaction-type set but a
+    blank amount is not enough to call it a transaction row -- it is read as
+    the (malformed) summary instead, and quarantined on its own terms (a
+    genuine transaction row's other columns are blank in a summary row)."""
+    row2 = _order_row(amount="")
+    path = _write(tmp_path, "weaktell.txt", [HEADER_ROW, row2, _order_row()])
+    result = parse_settlement_file(path)
+
+    assert result.hint != SUMMARY_ROW_MISSING_HINT
+    assert result.header is None
+    assert result.quarantined == (_q(path.name, 2, bad_date("settlement-start-date", "")),)
+
+
+# --------------------------------------------------------------------------- #
+# G4: a blank row 2 loses the summary total exactly like S7's transaction-row
+# case, but must not do so silently -- no quarantine (S6: blank lines are
+# never quarantined), but a hint naming what happened.
+# --------------------------------------------------------------------------- #
+
+
+def test_blank_summary_row_sets_a_hint_instead_of_silently_losing_the_total(tmp_path):
+    rows = [
+        HEADER_ROW,
+        "",  # row 2: blank where the summary should be
+        _order_row(**{"order-id": "ORD-1"}),
+    ]
+    path = _write(tmp_path, "blanksummary.txt", rows)
+
+    result = parse_settlement_file(path)
+
+    assert result.header is None
+    assert result.quarantined == ()
+    assert result.hint == SUMMARY_ROW_BLANK_HINT
+    assert len(result.lines) == 1
+    assert result.lines[0].line_id == f"{path.name}:3"
+
+
+def test_file_with_only_a_header_row_sets_the_blank_summary_hint(tmp_path):
+    path = _write(tmp_path, "headeronly.txt", [HEADER_ROW])
+
+    result = parse_settlement_file(path)
+
+    assert result.header is None
+    assert result.lines == ()
+    assert result.quarantined == ()
+    assert result.hint == SUMMARY_ROW_BLANK_HINT
 
 
 # --------------------------------------------------------------------------- #
