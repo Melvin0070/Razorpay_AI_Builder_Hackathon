@@ -111,15 +111,17 @@ SCENARIOS: Final[dict[Scenario, ScenarioMeta]] = {
         _C.REFUND_NO_FEE_REVERSAL,
         "Missing fee reversal whose SAFE-T filing window has already closed at as_of.",
     ),
-    # Not "no date on the line": SettlementLine.posted_date is a date, never
-    # None, so that shape cannot be seeded. The window runs from the return
-    # scan or the refund date, whichever is later, and the scan is on neither
-    # report -- so the window is unstartable while the refund is plainly there.
+    # The absence lives in the raw row, not in the parsed type: posted_date is
+    # a mandatory date, but the settlement file's posted-date field can be
+    # blank, and lane D quarantines that row rather than inventing a date. The
+    # refund then survives only as Order.refund_initiated_by, undated, so
+    # detector 5 must accept a refund whose event_date is None (lane B).
     Scenario.C5_WINDOW_DATE_MISSING: ScenarioMeta(
         _K.SEEDED_ERROR,
         _C.REFUND_NO_FEE_REVERSAL,
-        "Missing fee reversal whose window start — the return delivery scan, later "
-        "than the refund date — appears in no file the pipeline reads.",
+        "Missing fee reversal whose refund is evidenced only by the order export: "
+        "the settlement row that would date it carries no readable posted date and "
+        "is quarantined, so the filing window has no computable start.",
     ),
     Scenario.C5_GST_UNREGISTERED: ScenarioMeta(
         _K.SEEDED_ERROR,
