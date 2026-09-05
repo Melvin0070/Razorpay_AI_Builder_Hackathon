@@ -3,10 +3,11 @@ withholding rates. Lane B's half of the two independent encodings (D12); the
 detector side's half lives in ``ratecard/`` and this module never reads it.
 
 Every number below was read from the source named beside it on the date
-given. ``verified: true`` means the primary page was read directly on that
-date; ``verified: false`` marks a figure that could only be read from a
-secondary source, or that the previous run of this lane read and this run
-could not re-read. The lane report lists every ``verified: false`` figure.
+given. ``verified: true`` means this lane read the primary source directly
+on that date; ``verified: false`` marks a figure that could only be read
+from a secondary source. The lane report lists every ``verified: false``
+figure. Three runs of this lane read the sources (2026-09-04, 2026-09-05
+twice); the latest read of each figure is the one recorded.
 
 Basis of every band and percentage (the seam decision of 2026-09-05, which
 the corpus encodes the same way):
@@ -33,12 +34,13 @@ encoding of the page.
 
 Referral (commission) fee
     Source: https://sell.amazon.in/fees-and-pricing/fee-schedule, read
-    2026-09-05 (public, not login-walled), the referral-fee table, one row
-    per fee-category node. The page's June 10, 2026 revision names only
-    "Automotive - Tyres & Rims" and "Fans and Robotic Vacuums" ("Until June
-    9, 2026" / "From June 10, 2026" rows), so the three nodes carry the
-    16 March 2026 tiers unchanged on any ``as_of`` from that date on.
-    ``verified: true``.
+    2026-09-05 (public, not login-walled), the table "Changes in existing
+    fee categories", one row per fee-category node with two columns,
+    "Current Referral Fee" and "New Referral Fee (Effective 16th March)".
+    The page's June 10, 2026 revision names only "Automotive - Tyres & Rims"
+    and "Fans and Robotic Vacuums" ("Until June 9, 2026" / "From June 10,
+    2026" rows), so the three nodes carry the 16 March 2026 tiers unchanged
+    on any ``as_of`` from that date on. ``verified: true``.
 
     ``apparel`` → node "Apparel - Shirts":
         0.00% for item price <= 1,000; 21.00% for item price > 1,000.
@@ -52,11 +54,10 @@ Referral (commission) fee
         0.00% <= 300; 5.00% > 300 and <= 1,000; 17.00% > 1,000.
     Bands are inclusive at the upper bound exactly as the page writes them.
 
-    The pre-16-March tiers below were read by the previous run of this lane
-    on 2026-09-04 from the page's then "Current Referral Fee" column, which
-    the page no longer shows on 2026-09-05. ``verified: false``. They are
-    never used to compute a correct fee, only to author a realistic
-    stale-rate overcharge:
+    The pre-16-March tiers below are the same table's "Current Referral
+    Fee" column, still shown beside the new one and read 2026-09-05.
+    ``verified: true``. They are never used to compute a correct fee, only
+    to author a realistic stale-rate overcharge:
         apparel: 0% <= 300; 4.50% 300–500; 12.00% 500–1,000; 21.00% > 1,000
         home-kitchen: 0% <= 300; 5.00% 300–500; 9.00% 500–1,000; 12.50% > 1,000
         electronics-accessories: 0% <= 300; 17.00% 300–500; 15.50% 500–1,000;
@@ -74,8 +75,11 @@ Closing fee (fixed, per unit), Fulfilment Centre channel
     "Current Fee" and "Effective September 7th, 2026"), cross-checked against
     https://m.media-amazon.com/images/G/31/amazonservices/FC_Closing_fee2026.jpg
     on https://sell.amazon.in/fees-and-pricing ("Effective from March 16,
-    2026", identical to the "Current Fee" column), and the group membership
-    lists under the fee-schedule page's closing-fee legend. ``verified: true``.
+    2026", identical to the "Current Fee" column), the fee-schedule page's
+    closing-fee legend (which on 2026-09-05 already quotes the September
+    figures: "(Group #) ... ₹27", "(Group ##) ... ₹23", "(Group A) ... ₹21",
+    "(Group C) ... ₹19"), and the group membership lists that legend expands
+    to. ``verified: true``.
     Bands on "Item price including shipping charges", rupees: 0–300,
     301–500, 501–1,000, above 1,000.
         2026-03-16 .. 2026-09-06:
@@ -106,12 +110,13 @@ TCS, Section 52 CGST Act
     cent. of the net value of intra-State taxable supplies"; Notification
     15/2024-Central Tax (10-07-2024): "for the words 'half per cent.', the
     figure and word '0.25 per cent.' shall be substituted", in force from
-    publication. Both read as the PDFs linked from
-    https://gstcouncil.gov.in/node/4059 and https://gstcouncil.gov.in/node/5015
-    (previous run, 2026-09-04; the pages re-read 2026-09-05). ``verified:
-    true`` for the CGST leg. The SGST leg mirrors it under the state Acts
-    and the IGST leg (inter-State) is 0.5% from the same date, from a
-    secondary source only:
+    publication (10-07-2024). Read as the PDFs linked from
+    https://gstcouncil.gov.in/node/4059 (2026-09-04) and
+    https://gstcouncil.gov.in/node/5015, the latter re-read 2026-09-05 at
+    https://gstcouncil.gov.in/sites/default/files/2024-09/central-tax-15-2024-11072024.pdf.
+    ``verified: true`` for the CGST leg. The SGST leg mirrors it under the
+    state Acts and the IGST leg (inter-State) is 0.5% from the same date,
+    from a secondary source only:
     https://www.nyca.in/cbic-reduces-tcs-rate-from-1-to-0-5-for-e-commerce-operators-effective-july-10-2024/
     (2024-07-12). ``verified: false`` for SGST and IGST.
 
@@ -121,8 +126,9 @@ TDS, Section 194-O Income-tax Act
     word '0.1 per cent.' shall be substituted with effect from the 1st day
     of October, 2024"), in the Gazette of India at
     https://egazette.gov.in/WriteReadData/2024/256436.pdf (page 43), read
-    2026-09-05. ``verified: true``. The ₹5 lakh individual/HUF threshold does not apply
-    to a registered business seller and is not modelled.
+    2026-09-05 by both runs of this lane on that date. ``verified: true``.
+    The ₹5 lakh individual/HUF threshold does not apply to a registered
+    business seller and is not modelled.
 
 Refund commission (India term, RS3 §5)
     The Help Hub pages are login-walled and the public forum post
