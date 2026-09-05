@@ -2,12 +2,21 @@
 separator aware, D4/D7 traps 1 and 3). Pure functions that return ``None`` on
 any failure; every caller decides the exact quarantine reason and line_id, so
 these never raise and never guess.
+
+Offset-aware timestamps (the ISO-8601-with-offset form) are converted to UTC
+*before* the date is taken, so ``2026-08-16T02:00:00+05:30`` and
+``2026-08-15 20:30:00 UTC`` -- the same instant, spelled two accepted ways --
+agree on the date (S8). Naive dates (``YYYY-MM-DD``) and the ``... UTC`` form
+are taken exactly as written: they carry no offset to convert. This matters
+because ``posted_date`` feeds D20 cycle folding and the ``as_of`` default; a
+date that depends on which spelling the file happened to use would make
+window arithmetic non-deterministic across otherwise-identical settlements.
 """
 
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from leakproof.contract import Paise
 
@@ -23,7 +32,11 @@ def parse_flexible_date(raw: str) -> date | None:
     """Accepts ``YYYY-MM-DD``, ``YYYY-MM-DD HH:MM:SS UTC``, and ISO-8601 with
     a numeric offset. Anything else (including empty) is ``None`` so the
     caller can quarantine with the literal string -- the date/timestamp
-    format is unconfirmed for the flat file (spec trap 3)."""
+    format is unconfirmed for the flat file (spec trap 3).
+
+    The ISO-offset form is converted to UTC before its date is taken (S8);
+    the other two forms carry no offset and are taken as written.
+    """
     s = raw.strip()
     if not s:
         return None
@@ -39,9 +52,10 @@ def parse_flexible_date(raw: str) -> date | None:
             return None
     if _RE_ISO_OFFSET.fullmatch(s):
         try:
-            return datetime.fromisoformat(s).date()
+            dt = datetime.fromisoformat(s)
         except ValueError:
             return None
+        return dt.astimezone(UTC).date()
     return None
 
 

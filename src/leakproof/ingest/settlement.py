@@ -6,6 +6,15 @@ reason string and a line_id citing its physical row (header is row 1, per
 ``transaction-type`` values are NOT quarantined -- they classify to
 ``LineKind.UNCLASSIFIED`` / ``TransactionType.OTHER`` with the raw string
 kept on the line (D4); only structurally malformed rows are quarantined.
+
+Physical lines are read as bytes and split with ``bytes.splitlines()``, not
+``str.splitlines()`` -- the latter also breaks on ``\\v``, ``\\f``, U+001C-U+001E
+and U+0085, which would shift every later line_id off what a text editor
+shows (S9's sibling trap for this file). Each physical line is then decoded on
+its own with ``errors="surrogateescape"``: an undecodable byte becomes a lone
+surrogate (U+DC80-U+DCFF) rather than raising, so one bad row (S1, e.g. an
+Excel re-save as Windows-1252) quarantines only that row -- the rest of the
+file still parses.
 """
 
 from __future__ import annotations
@@ -20,6 +29,7 @@ from leakproof.ingest.parsing import (
     parse_plain_int,
 )
 from leakproof.ingest.reasons import (
+    NOT_VALID_UTF8,
     amount_not_numeric,
     bad_date,
     column_count,
@@ -60,6 +70,18 @@ SETTLEMENT_COLUMNS: tuple[str, ...] = (
 #: Wireframe frame 4, "Nothing parsed": every row saved as CSV has one column.
 CSV_HINT = "the file was saved as CSV; Amazon Settlement Flat File V2 is tab-separated"
 
+#: S5: every row has exactly one extra, empty, trailing tab-separated field --
+#: the file was re-saved with a stray trailing tab on every line, not
+#: genuinely malformed.
+TRAILING_TAB_HINT = (
+    "every row has one extra empty column: a trailing tab; "
+    "Amazon Settlement Flat File V2 has 24 tab-separated columns"
+)
+
+#: S7: row 2 carries a non-empty ``transaction-type``, so it is a transaction
+#: row, not the summary -- the summary row itself is missing from the file.
+SUMMARY_ROW_MISSING_HINT = "summary row missing: row 2 is a transaction row"
+
 
 def _header_missing_hint() -> str:
     return (
@@ -68,9 +90,53 @@ def _header_missing_hint() -> str:
     )
 
 
+def _has_undecodable_bytes(s: str) -> bool:
+    """True when ``s`` contains a lone surrogate left by
+    ``errors="surrogateescape"`` -- i.e. this physical line was not valid
+    UTF-8 (S1)."""
+    return any(0xDC80 <= ord(ch) <= 0xDCFF for ch in s)
+
+
+def _is_blank(raw: str) -> bool:
+    """S6: a physical line that is empty once whitespace is stripped."""
+    return raw.strip() == ""
+
+
+def _all_rows_have_trailing_tab(non_blank_rows: list[str]) -> bool:
+    if not non_blank_rows:
+        return False
+    return all(len(r.split("\t")) == 25 and r.split("\t")[-1] == "" for r in non_blank_rows)
+
+
+def _detect_file_separator(summary_amount_raw: str | None, transaction_rows: list[str]) -> str:
+    """S3: detect from the summary row's ``total-amount`` first; if that
+    yields nothing (missing, unreadable, or the summary row itself is
+    missing/malformed), from the first transaction row whose ``amount``
+    contains ``.`` or ``,``; only then default to ``.``."""
+    if summary_amount_raw is not None:
+        separator = detect_separator(summary_amount_raw)
+        if separator is not None:
+            return separator
+    for raw in transaction_rows:
+        if _is_blank(raw) or _has_undecodable_bytes(raw):
+            continue
+        fields = raw.split("\t")
+        if len(fields) < 15:
+            continue
+        candidate = fields[14]
+        if "." in candidate or "," in candidate:
+            separator = detect_separator(candidate)
+            if separator is not None:
+                return separator
+    return "."
+
+
 def parse_settlement_file(path: Path) -> SettlementFileParse:
     source_file = path.name
-    rows = path.read_text(encoding="utf-8").splitlines()
+    byte_lines = path.read_bytes().splitlines()
+    rows = [bl.decode("utf-8", errors="surrogateescape") for bl in byte_lines]
+    if rows:
+        rows[0] = rows[0].lstrip("﻿")  # S4: strip a leading BOM on row 1 only
 
     if not rows:
         return SettlementFileParse(
@@ -81,82 +147,128 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
             hint=_header_missing_hint(),
         )
 
-    all_single_column = all(len(r.split("\t")) == 1 for r in rows)
+    non_blank_rows = [r for r in rows if not _is_blank(r)]
+    all_single_column = bool(non_blank_rows) and all(
+        len(r.split("\t")) == 1 for r in non_blank_rows
+    )
+    trailing_tab = _all_rows_have_trailing_tab(non_blank_rows)
+
     quarantined: list[QuarantinedRow] = []
 
     # Row 1: header layout, validated against the 24 column names. Tracked
     # separately from the parsed summary row below -- "header" in the brief's
     # hint rule ("missing or unknown") means *this* row, not SettlementHeader.
-    header_fields = rows[0].split("\t")
-    header_row_ok = tuple(header_fields) == SETTLEMENT_COLUMNS
-    if len(header_fields) != 24:
+    row1 = rows[0]
+    header_row_ok = False
+    if _has_undecodable_bytes(row1):
         quarantined.append(
-            QuarantinedRow(
-                line_id=make_line_id(source_file, 1),
-                reason=column_count(24, len(header_fields), "tab"),
-            )
+            QuarantinedRow(line_id=make_line_id(source_file, 1), reason=NOT_VALID_UTF8)
         )
-    elif not header_row_ok:
-        quarantined.append(
-            QuarantinedRow(line_id=make_line_id(source_file, 1), reason=unknown_header_layout())
-        )
-
-    # Row 2: summary -> SettlementHeader, and the file's decimal separator
-    # (detected from total-amount regardless of whether the rest of the row
-    # is otherwise well-formed, so downstream lines still parse correctly).
-    header: SettlementHeader | None = None
-    separator = "."
-    if len(rows) >= 2:
-        summary_fields = rows[1].split("\t")
-        total_amount_raw = summary_fields[4] if len(summary_fields) >= 5 else ""
-        separator = detect_separator(total_amount_raw) or "."
-
-        if len(summary_fields) != 24:
+    else:
+        header_fields = row1.split("\t")
+        header_row_ok = tuple(header_fields) == SETTLEMENT_COLUMNS
+        if len(header_fields) != 24:
             quarantined.append(
                 QuarantinedRow(
-                    line_id=make_line_id(source_file, 2),
-                    reason=column_count(24, len(summary_fields), "tab"),
+                    line_id=make_line_id(source_file, 1),
+                    reason=column_count(24, len(header_fields), "tab"),
                 )
             )
+        elif not header_row_ok:
+            quarantined.append(
+                QuarantinedRow(line_id=make_line_id(source_file, 1), reason=unknown_header_layout())
+            )
+
+    # Row 2: is it really the summary row, or (S7) a transaction row because
+    # the summary is missing from the file? A non-empty transaction-type in
+    # what should be an all-blank-but-for-five-fields summary row is the tell.
+    row2_raw = rows[1] if len(rows) >= 2 else None
+    row2_blank = row2_raw is not None and _is_blank(row2_raw)
+    row2_bad_utf8 = row2_raw is not None and not row2_blank and _has_undecodable_bytes(row2_raw)
+    row2_is_transaction = False
+    if row2_raw is not None and not row2_blank and not row2_bad_utf8:
+        row2_fields = row2_raw.split("\t")
+        if len(row2_fields) >= 7 and row2_fields[6].strip() != "":
+            row2_is_transaction = True
+
+    summary_missing_hint: str | None = None
+    summary_amount_raw: str | None = None
+    if row2_is_transaction:
+        summary_missing_hint = SUMMARY_ROW_MISSING_HINT
+        transaction_slice = list(enumerate(rows[1:], start=2))
+    elif row2_raw is not None and not row2_blank and not row2_bad_utf8:
+        summary_fields = row2_raw.split("\t")
+        summary_amount_raw = summary_fields[4] if len(summary_fields) >= 5 else None
+        transaction_slice = list(enumerate(rows[2:], start=3))
+    else:
+        transaction_slice = list(enumerate(rows[2:], start=3))
+
+    separator = _detect_file_separator(
+        summary_amount_raw,
+        [raw for _, raw in transaction_slice] if row2_is_transaction else rows[2:],
+    )
+
+    header: SettlementHeader | None = None
+    if not row2_is_transaction and row2_raw is not None and not row2_blank:
+        if row2_bad_utf8:
+            quarantined.append(
+                QuarantinedRow(line_id=make_line_id(source_file, 2), reason=NOT_VALID_UTF8)
+            )
         else:
-            start_date = parse_flexible_date(summary_fields[1])
-            end_date = parse_flexible_date(summary_fields[2])
-            deposit_date = parse_flexible_date(summary_fields[3])
-            total_amount_paise = parse_decimal_amount(summary_fields[4], separator)
-            reason: str | None = None
-            if start_date is None:
-                reason = bad_date("settlement-start-date", summary_fields[1])
-            elif end_date is None:
-                reason = bad_date("settlement-end-date", summary_fields[2])
-            elif deposit_date is None:
-                reason = bad_date("deposit-date", summary_fields[3])
-            elif total_amount_paise is None:
-                reason = amount_not_numeric(summary_fields[4])
-            if reason is not None:
+            summary_fields = row2_raw.split("\t")
+            if len(summary_fields) != 24:
                 quarantined.append(
-                    QuarantinedRow(line_id=make_line_id(source_file, 2), reason=reason)
+                    QuarantinedRow(
+                        line_id=make_line_id(source_file, 2),
+                        reason=column_count(24, len(summary_fields), "tab"),
+                    )
                 )
             else:
-                assert start_date is not None
-                assert end_date is not None
-                assert deposit_date is not None
-                assert total_amount_paise is not None
-                header = SettlementHeader(
-                    settlement_id=summary_fields[0].strip(),
-                    start_date=start_date,
-                    end_date=end_date,
-                    deposit_date=deposit_date,
-                    total_amount_paise=total_amount_paise,
-                    currency=summary_fields[5].strip(),
-                    source_line_id=make_line_id(source_file, 2),
-                )
+                start_date = parse_flexible_date(summary_fields[1])
+                end_date = parse_flexible_date(summary_fields[2])
+                deposit_date = parse_flexible_date(summary_fields[3])
+                total_amount_paise = parse_decimal_amount(summary_fields[4], separator)
+                reason: str | None = None
+                if start_date is None:
+                    reason = bad_date("settlement-start-date", summary_fields[1])
+                elif end_date is None:
+                    reason = bad_date("settlement-end-date", summary_fields[2])
+                elif deposit_date is None:
+                    reason = bad_date("deposit-date", summary_fields[3])
+                elif total_amount_paise is None:
+                    reason = amount_not_numeric(summary_fields[4])
+                if reason is not None:
+                    quarantined.append(
+                        QuarantinedRow(line_id=make_line_id(source_file, 2), reason=reason)
+                    )
+                else:
+                    assert start_date is not None
+                    assert end_date is not None
+                    assert deposit_date is not None
+                    assert total_amount_paise is not None
+                    header = SettlementHeader(
+                        settlement_id=summary_fields[0].strip(),
+                        start_date=start_date,
+                        end_date=end_date,
+                        deposit_date=deposit_date,
+                        total_amount_paise=total_amount_paise,
+                        currency=summary_fields[5].strip(),
+                        source_line_id=make_line_id(source_file, 2),
+                    )
 
-    # Rows 3+: transaction lines.
+    # Transaction lines: rows 3+ normally, or rows 2+ under S7.
     lines: list[SettlementLine] = []
-    for physical_row, raw in enumerate(rows[2:], start=3):
-        fields = raw.split("\t")
+    for physical_row, raw in transaction_slice:
+        if _is_blank(raw):
+            continue  # S6: blank line, never quarantined; physical numbering unaffected
+
         line_id = make_line_id(source_file, physical_row)
 
+        if _has_undecodable_bytes(raw):
+            quarantined.append(QuarantinedRow(line_id=line_id, reason=NOT_VALID_UTF8))
+            continue
+
+        fields = raw.split("\t")
         if len(fields) != 24:
             quarantined.append(
                 QuarantinedRow(line_id=line_id, reason=column_count(24, len(fields), "tab"))
@@ -216,6 +328,10 @@ def parse_settlement_file(path: Path) -> SettlementFileParse:
     hint: str | None = None
     if all_single_column:
         hint = CSV_HINT
+    elif trailing_tab:
+        hint = TRAILING_TAB_HINT
+    elif summary_missing_hint is not None:
+        hint = summary_missing_hint
     elif not header_row_ok:
         hint = _header_missing_hint()
 

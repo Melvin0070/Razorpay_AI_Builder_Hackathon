@@ -50,3 +50,29 @@ def missing_field(field: str) -> str:
 
 def unknown_refund_initiated_by(raw: str) -> str:
     return f"unknown refund_initiated_by: '{raw}'"
+
+
+#: S1: a row that could not be decoded as UTF-8 (one or more undecodable
+#: bytes, surfaced via ``errors="surrogateescape"``). The rest of the file
+#: still parses -- only this row is quarantined.
+NOT_VALID_UTF8 = "not valid UTF-8"
+
+#: S2: the header row failed exact-name/column-count validation, so nothing
+#: in the rest of the file is parsed by guessed column position -- every
+#: later row gets this same stable reason rather than a fabricated value.
+NOT_PARSED_BAD_HEADER = "not parsed: unknown header layout"
+
+
+def quantity_not_positive(raw: str) -> str:
+    """S12."""
+    return f"quantity not positive: '{raw}'"
+
+
+def principal_negative(raw: str) -> str:
+    """S12."""
+    return f"principal negative: '{raw}'"
+
+
+def tax_negative(raw: str) -> str:
+    """S12."""
+    return f"tax negative: '{raw}'"
