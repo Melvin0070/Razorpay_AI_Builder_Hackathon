@@ -21,6 +21,22 @@ Reading the expectations:
 
 Dates are explicit and every ``as_of`` is set on the fold, because half of
 these cases exist to catch off-by-one deadline arithmetic (D18).
+
+The ``as_of`` convention, stated so lane N does not have to guess it:
+
+* A ``HoldoutCase`` carries no ``batch_max_settlement_date``. ``FoldedOrder``
+  has no such field, and adding one is a seam change nobody has taken. Wherever
+  the design says "the batch's max settlement date" — D20's one-cycle rule, and
+  the ``days_left`` arithmetic of ladder steps 2 and 3 — read ``folded.as_of``
+  instead. H26's reason names 2026-07-21 as its batch max on exactly that
+  reading, and ``test_exactly_one_case_sits_on_the_one_cycle_boundary``
+  measures the boundary from ``as_of`` for the same reason.
+* ``as_of`` is therefore never earlier than the last settlement the case folds,
+  and it is ``C3_DATE`` for every case built on the C1/C2/C3 calendar,
+  regardless of how many of those three cycles the case actually folds. The two
+  cases that sit off that calendar, H11 on a leap day and H12 on a month end,
+  set their own, because the whole point of them is a specific number of
+  calendar days between the refund and ``as_of``.
 """
 
 from __future__ import annotations
@@ -828,7 +844,7 @@ H08 = HoldoutCase(
             ),
         ),
         (C1_ID,),
-        C2_DATE,
+        C3_DATE,
     ),
     profile=LAPSED_GST,
     expected_class=ErrorClass.COMMISSION_OVERCHARGE,

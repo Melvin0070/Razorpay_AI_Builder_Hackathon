@@ -37,6 +37,17 @@ def test_every_fold_carries_an_as_of(case):
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
+def test_as_of_stands_in_for_the_batchs_max_settlement_date(case):
+    # Gap F9: a HoldoutCase carries no batch_max_settlement_date, so folded.as_of
+    # is the stand-in wherever D20's cycle rule wants one. The convention is only
+    # usable if as_of is never earlier than the last settlement the case folds.
+    ends = [SETTLEMENT_CYCLE_END[sid] for sid in case.folded.settlement_ids]
+    if not ends:
+        return
+    assert case.folded.as_of >= max(ends), case.case_id
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)
 def test_every_line_id_parses(case):
     for line in case.folded.lines:
         source_file, row = c.parse_line_id(line.line_id)
