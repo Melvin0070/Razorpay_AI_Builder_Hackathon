@@ -12,7 +12,13 @@ import pytest
 
 from leakproof.ratecard import CorpusError, load_rate_card
 
-COVERAGE = {"categories": ["apparel"], "valid_from": "2026-03-16", "valid_to": None}
+COVERAGE = {
+    "categories": ["apparel"],
+    "valid_from": "2026-03-16",
+    "valid_to": None,
+    "audited_kinds": ["fee-tax"],
+    "acknowledged_kinds": [],
+}
 SOURCE = {
     "label": "fixture",
     "url": "https://sell.amazon.in/fees-and-pricing",
@@ -43,7 +49,9 @@ BANDED = {
     "slab_basis": "unit-item-price",
     "slab_min_paise": 100001,
 }
-BANDED_COVERAGE = {**COVERAGE, "slab_bases": {"commission": "unit-item-price"}}
+#: The same coverage block with and without the slab_bases a banded rule needs.
+BANDED_KINDS = {**COVERAGE, "audited_kinds": ["commission"]}
+BANDED_COVERAGE = {**BANDED_KINDS, "slab_bases": {"commission": "unit-item-price"}}
 
 
 def _write(root, coverage=COVERAGE, docs=None):
@@ -172,7 +180,11 @@ def test_one_kind_banded_on_two_different_figures_is_rejected(tmp_path):
 
 
 def test_banded_rules_with_no_declared_basis_in_coverage_are_rejected(tmp_path):
-    root = _write(tmp_path / "c", docs={"r.json": {"source": SOURCE, "rules": [BANDED]}})
+    root = _write(
+        tmp_path / "c",
+        coverage=BANDED_KINDS,
+        docs={"r.json": {"source": SOURCE, "rules": [BANDED]}},
+    )
     with pytest.raises(CorpusError, match="'slab_bases' is required"):
         load_rate_card(root)
 
@@ -180,11 +192,50 @@ def test_banded_rules_with_no_declared_basis_in_coverage_are_rejected(tmp_path):
 def test_a_coverage_declaration_that_contradicts_the_rules_is_rejected(tmp_path):
     """Two statements of one fact only help when they are checked against each
     other; otherwise the dashboard can show a basis the rules do not use."""
-    coverage = {**COVERAGE, "slab_bases": {"commission": "buyer-paid-item-price"}}
+    coverage = {**BANDED_KINDS, "slab_bases": {"commission": "buyer-paid-item-price"}}
     root = _write(
         tmp_path / "c",
         coverage=coverage,
         docs={"r.json": {"source": SOURCE, "rules": [BANDED]}},
     )
     with pytest.raises(CorpusError, match="slab_bases declares"):
+        load_rate_card(root)
+
+
+def test_a_declared_kind_no_rule_carries_is_rejected(tmp_path):
+    """The kinds are declared, not derived, so a deleted rule document leaves
+    its claim standing and fails at load instead of shrinking the sweep."""
+    coverage = {**COVERAGE, "audited_kinds": ["fee-tax", "tcs"]}
+    root = _write(tmp_path / "c", coverage=coverage)
+    with pytest.raises(CorpusError, match=r"declares audited kind\(s\) no rule carries: tcs"):
+        load_rate_card(root)
+
+
+def test_a_rule_of_an_undeclared_kind_is_rejected(tmp_path):
+    """The other direction: a kind the corpus prices but never claims resolves
+    at lookup and is swept by nothing."""
+    rules = [RULE, {**RULE, "rule_id": "r2", "kind": "tcs", "percent_bp": 50}]
+    root = _write(tmp_path / "c", docs={"rules.json": {"source": SOURCE, "rules": rules}})
+    with pytest.raises(CorpusError, match=r"rules carry audited kind\(s\).*: tcs"):
+        load_rate_card(root)
+
+
+def test_a_coverage_block_without_the_kind_lists_is_rejected(tmp_path):
+    coverage = {k: v for k, v in COVERAGE.items() if k != "acknowledged_kinds"}
+    root = _write(tmp_path / "c", coverage=coverage)
+    with pytest.raises(CorpusError, match="'acknowledged_kinds' is required"):
+        load_rate_card(root)
+
+
+def test_a_declared_kind_that_is_not_a_line_kind_is_rejected(tmp_path):
+    coverage = {**COVERAGE, "audited_kinds": ["fee-tax", "referral-fee"]}
+    root = _write(tmp_path / "c", coverage=coverage)
+    with pytest.raises(CorpusError, match="'referral-fee' is not a LineKind"):
+        load_rate_card(root)
+
+
+def test_a_kind_declared_in_both_lists_is_rejected(tmp_path):
+    coverage = {**COVERAGE, "acknowledged_kinds": ["fee-tax"]}
+    root = _write(tmp_path / "c", coverage=coverage)
+    with pytest.raises(CorpusError, match="either audited or acknowledged"):
         load_rate_card(root)

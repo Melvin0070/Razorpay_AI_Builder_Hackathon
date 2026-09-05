@@ -5,6 +5,12 @@
   ],
   "valid_from": "2026-03-16",
   "valid_to": null,
+  "audited_kinds": [
+    "commission",
+    "fixed-closing-fee",
+    "fee-tax"
+  ],
+  "acknowledged_kinds": [],
   "slab_bases": {
     "commission": "unit-item-price"
   },

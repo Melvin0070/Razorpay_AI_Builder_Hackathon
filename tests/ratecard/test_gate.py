@@ -5,6 +5,7 @@ the sweep and say where. Without the second half the gate is untested and a
 corpus typo would still land as a quietly lower recall number.
 """
 
+import shutil
 from datetime import date
 
 import pytest
@@ -14,7 +15,7 @@ from leakproof.ratecard import RateCardCorpus, config_error_gate, load_rate_card
 from leakproof.ratecard.gate import GATE_NAME
 from leakproof.scenarios import SCENARIOS, Scenario, ScenarioKind
 from leakproof.types import LookupMiss
-from tests.ratecard.conftest import SLAB_GAP_CORPUS
+from tests.ratecard.conftest import CORPUS, SLAB_GAP_CORPUS
 
 GAP_PRINCIPAL = 40_000
 INSIDE = date(2026, 8, 21)
@@ -95,6 +96,34 @@ def test_the_gap_is_the_only_failure_in_the_fixture(broken_card):
     """So the fixture tests the gate, not a corpus that is broken everywhere."""
     misses = sweep(broken_card)
     assert {m.kind for m in misses} == {LineKind.COMMISSION}
+
+
+@pytest.mark.parametrize(
+    ("document", "kind"),
+    [("amazon-in-fee-gst.json", "fee-tax"), ("cgst-section-52-tcs.json", "tcs")],
+)
+def test_deleting_a_whole_rule_document_fails_the_gate(tmp_path, document, kind):
+    """The regression the declared kinds exist for.
+
+    With the kind lists derived from the loaded rules, deleting a document
+    deleted the claim with it: the sweep iterated the surviving kinds, the gate
+    stayed green, and every lookup of the deleted kind missed at runtime.
+    """
+    root = tmp_path / "corpus"
+    shutil.copytree(CORPUS, root)
+    (root / document).unlink()
+
+    result = config_error_gate(root)
+    assert not result.ok
+    assert kind in result.detail
+    assert document not in result.detail  # the claim is named, not the file
+
+
+def test_the_packaged_corpus_still_sweeps_clean_when_copied(tmp_path):
+    """So the deletion above is what fails, not the copy."""
+    root = tmp_path / "corpus"
+    shutil.copytree(CORPUS, root)
+    assert config_error_gate(root).ok
 
 
 @pytest.mark.parametrize("scenario", [Scenario.CONFIG_ERROR])

@@ -476,7 +476,7 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
         raise CorpusError(f"corpus directory not found: {root}")
 
     coverage_raw = _read_json(root / COVERAGE_FILE)
-    for field in ("categories", "valid_from"):
+    for field in ("categories", "valid_from", "audited_kinds", "acknowledged_kinds"):
         if field not in coverage_raw:
             raise CorpusError(f"{COVERAGE_FILE}: {field!r} is required")
     rules: list[RateRule] = []
@@ -512,10 +512,8 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
             if coverage_raw.get("valid_to") is not None
             else None
         ),
-        # Derived, never a second hand-maintained list: a kind is audited when
-        # the corpus prices it and acknowledged when the corpus only knows it.
-        audited_kinds=_kinds(ordered, audited=True),
-        acknowledged_kinds=_kinds(ordered, audited=False),
+        audited_kinds=_declared_kinds(coverage_raw, "audited_kinds"),
+        acknowledged_kinds=_declared_kinds(coverage_raw, "acknowledged_kinds"),
     )
     overlap = set(declaration.audited_kinds) & set(declaration.acknowledged_kinds)
     if overlap:
@@ -523,6 +521,7 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
             "a kind is either audited or acknowledged, never both: "
             + ", ".join(sorted(k.value for k in overlap))
         )
+    _check_declared_kinds(ordered, declaration)
     _check_slab_bases(ordered, bases, coverage_raw)
     return RateCardCorpus(
         rules=ordered,
@@ -530,6 +529,53 @@ def load_rate_card(path: Path | None = None) -> RateCardCorpus:
         source_path=root,
         slab_bases=tuple(sorted(bases.items())),
     )
+
+
+def _declared_kinds(coverage_raw: dict[str, Any], field: str) -> tuple[LineKind, ...]:
+    """One of ``coverage.json``'s two kind lists, in ``LineKind`` order."""
+    raw = coverage_raw[field]
+    if not isinstance(raw, list):
+        raise CorpusError(f"{COVERAGE_FILE}.{field}: expected a list of kinds, got {raw!r}")
+    kinds = {_parse_kind(str(v), where=f"{COVERAGE_FILE}.{field}") for v in raw}
+    if len(kinds) != len(raw):
+        raise CorpusError(f"{COVERAGE_FILE}.{field}: a kind is listed twice")
+    return tuple(k for k in LineKind if k in kinds)
+
+
+def _check_declared_kinds(rules: tuple[RateRule, ...], declaration: CoverageDeclaration) -> None:
+    """The declared kinds and the kinds the rules carry must be the same set.
+
+    Deriving the declaration from the rules alone made the D17 gate
+    tautological on kinds: ``sweep`` walks the declared kinds, so deleting a
+    whole rule document deleted the claim along with the rules and the gate
+    stayed green while every lookup of that kind missed at runtime. Two
+    statements, checked against each other, is the same shape ``_check_slab_bases``
+    already uses.
+    """
+    priced, acknowledged = _kinds(rules, audited=True), _kinds(rules, audited=False)
+    both = set(priced) & set(acknowledged)
+    if both:
+        raise CorpusError(
+            "a kind is either audited or acknowledged, never both: "
+            + ", ".join(sorted(k.value for k in both))
+        )
+    problems: list[str] = []
+    for label, declared, derived in (
+        ("audited", declaration.audited_kinds, priced),
+        ("acknowledged", declaration.acknowledged_kinds, acknowledged),
+    ):
+        missing = sorted(k.value for k in set(declared) - set(derived))
+        extra = sorted(k.value for k in set(derived) - set(declared))
+        if missing:
+            problems.append(
+                f"{COVERAGE_FILE} declares {label} kind(s) no rule carries: {', '.join(missing)}"
+            )
+        if extra:
+            problems.append(
+                f"rules carry {label} kind(s) {COVERAGE_FILE} does not declare: {', '.join(extra)}"
+            )
+    if problems:
+        raise CorpusError("; ".join(problems))
 
 
 def _check_slab_bases(

@@ -7,6 +7,31 @@
   ],
   "valid_from": "2026-03-16",
   "valid_to": null,
+  "audited_kinds": [
+    "commission",
+    "fixed-closing-fee",
+    "fee-tax",
+    "tcs",
+    "tds"
+  ],
+  "acknowledged_kinds": [
+    "principal",
+    "item-tax",
+    "shipping-charge",
+    "shipping-charge-tax",
+    "shipping-fee",
+    "fulfilment-fee",
+    "storage-fee",
+    "gift-wrap",
+    "goodwill",
+    "restocking-fee",
+    "marketplace-facilitator-tax",
+    "refund-admin-fee",
+    "promotion",
+    "reserve",
+    "safe-t-reimbursement"
+  ],
+  "kinds_note": "What the corpus claims to answer for, stated here and carried by the rules, and cross-checked at load: a declared kind no rule carries, or a rule of a kind not declared here, is a CorpusError. Declared rather than derived because the D17 gate sweeps the declared kinds: with the lists derived from the loaded rules, deleting amazon-in-fee-gst.json deleted the fee-tax claim along with the rule and the sweep stayed green while every FEE_TAX lookup missed at runtime. technology-fee and unclassified are absent from both lists on purpose (ADR-0005 decision 2, the C8_CODE_KNOWN_NO_RULE and C8_CODE_UNSEEN scenarios).",
   "slab_bases": {
     "commission": "unit-item-price",
     "fixed-closing-fee": "buyer-paid-item-price"

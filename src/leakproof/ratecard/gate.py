@@ -21,7 +21,7 @@ from pathlib import Path
 
 from leakproof.contract import Disposition, LineKind, Paise
 from leakproof.gates import GateResult
-from leakproof.ratecard.loader import RateCardCorpus, load_rate_card
+from leakproof.ratecard.loader import CorpusError, RateCardCorpus, load_rate_card
 from leakproof.types import LookupMiss
 
 GATE_NAME = "ratecard-config-error"
@@ -41,7 +41,14 @@ _DAY = timedelta(days=1)
 
 def config_error_gate(path: Path | None = None) -> GateResult:
     """Sweep the corpus and fail on any CONFIG_ERROR inside declared coverage."""
-    card = load_rate_card(path)
+    try:
+        card = load_rate_card(path)
+    except CorpusError as exc:
+        # A corpus that will not load is the same build failure as a corpus
+        # that sweeps dirty, and it reaches the operator the same way: one
+        # FAIL line naming the file and the field, not a traceback out of
+        # make verify. Deleting a whole rule document lands here.
+        return GateResult(GATE_NAME, False, f"the corpus does not load: {exc}")
     problems = [m.detail for m in sweep(card)]
     if problems:
         head = problems[0]
