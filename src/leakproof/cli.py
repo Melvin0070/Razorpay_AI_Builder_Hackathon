@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 #: Commands whose lane has not merged yet, with the issue that tracks it.
 NOT_BUILT: dict[str, tuple[str, int]] = {
-    "gen": ("B", 5),
     "demo": ("G", 10),
     "serve": ("G", 10),
     "triage": ("M", 16),
@@ -63,12 +62,17 @@ def cmd_not_built(name: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from leakproof.generator import command as gen_command
+
     parser = argparse.ArgumentParser(prog="leakproof", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("verify", help="run every hard gate; zero network, no key")
+    gen_command.add_arguments(sub.add_parser("gen", help="write a synthetic batch"))
     for name in NOT_BUILT:
         sub.add_parser(name)
     args = parser.parse_args(argv)
     if args.cmd == "verify":
         return cmd_verify(args)
+    if args.cmd == "gen":
+        return gen_command.run(args)
     return cmd_not_built(args.cmd)
