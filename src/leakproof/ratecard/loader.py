@@ -173,6 +173,18 @@ def _parse_rule(
         citation=citation,
         audited=bool(raw.get("audited", True)),
     )
+    # A rate out of range loads clean, passes every slab and window check and
+    # sweeps green, then produces a negative expected fee that reads as money
+    # owed to the seller. A negative slab bound is worse than wrong: the gate
+    # probes band keys from zero up, so nothing ever reaches it.
+    if rule.percent_bp is not None and not 0 <= rule.percent_bp <= 10_000:
+        raise CorpusError(
+            f"{at}: percent_bp {rule.percent_bp} is outside 0..10000 basis points (0..100%)"
+        )
+    for field in ("fixed_paise", "slab_min_paise", "slab_max_paise"):
+        amount = getattr(rule, field)
+        if amount is not None and amount < 0:
+            raise CorpusError(f"{at}: {field} {amount} is negative; paise are unsigned here")
     if rule.valid_to is not None and rule.valid_to < rule.valid_from:
         raise CorpusError(f"{at}: valid_to {rule.valid_to} precedes valid_from {rule.valid_from}")
     if (

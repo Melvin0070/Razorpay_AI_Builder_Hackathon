@@ -81,6 +81,44 @@ def test_a_float_rate_is_rejected_rather_than_coerced(tmp_path):
         load_rate_card(root)
 
 
+@pytest.mark.parametrize("percent_bp", [-1800, -1, 10_001])
+def test_a_rate_outside_zero_to_a_hundred_percent_is_rejected(tmp_path, percent_bp):
+    """percent_bp -1800 used to load clean and price an 18% credit."""
+    rule = {**RULE, "percent_bp": percent_bp}
+    root = _write(tmp_path / "c", docs={"rules.json": {"source": SOURCE, "rules": [rule]}})
+    with pytest.raises(CorpusError, match=r"outside 0\.\.10000 basis points"):
+        load_rate_card(root)
+
+
+@pytest.mark.parametrize("percent_bp", [0, 10_000])
+def test_the_ends_of_the_basis_point_range_are_accepted(tmp_path, percent_bp):
+    """Apparel really does price a 0% band, so the bound is inclusive."""
+    rule = {**RULE, "percent_bp": percent_bp}
+    root = _write(tmp_path / "c", docs={"rules.json": {"source": SOURCE, "rules": [rule]}})
+    assert load_rate_card(root).rules[0].percent_bp == percent_bp
+
+
+def test_a_negative_fixed_amount_is_rejected(tmp_path):
+    rule = {**RULE, "percent_bp": None, "fixed_paise": -5200}
+    root = _write(tmp_path / "c", docs={"rules.json": {"source": SOURCE, "rules": [rule]}})
+    with pytest.raises(CorpusError, match="fixed_paise -5200 is negative"):
+        load_rate_card(root)
+
+
+@pytest.mark.parametrize("field", ["slab_min_paise", "slab_max_paise"])
+def test_a_negative_slab_bound_is_rejected(tmp_path, field):
+    """The gate probes band keys from zero up, so a negative bound is a band
+    nothing ever sweeps."""
+    rule = {**BANDED, "slab_min_paise": None, field: -1}
+    root = _write(
+        tmp_path / "c",
+        coverage=BANDED_COVERAGE,
+        docs={"r.json": {"source": SOURCE, "rules": [rule]}},
+    )
+    with pytest.raises(CorpusError, match=f"{field} -1 is negative"):
+        load_rate_card(root)
+
+
 def test_a_citation_without_a_url_is_rejected(tmp_path):
     source = {**SOURCE, "url": "the fee schedule"}
     root = _write(tmp_path / "c", docs={"rules.json": {"source": source, "rules": [RULE]}})

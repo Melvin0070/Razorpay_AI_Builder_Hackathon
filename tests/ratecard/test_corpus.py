@@ -57,6 +57,14 @@ def test_money_and_basis_points_are_integers(card):
             assert value is None or (isinstance(value, int) and not isinstance(value, bool))
 
 
+def test_every_rate_is_inside_its_range(card):
+    """A negative rate would price a fee as a credit and sweep green doing it."""
+    for rule in card.rules:
+        assert rule.percent_bp is None or 0 <= rule.percent_bp <= 10_000, rule.rule_id
+        for amount in (rule.fixed_paise, rule.slab_min_paise, rule.slab_max_paise):
+            assert amount is None or amount >= 0, rule.rule_id
+
+
 def test_no_float_anywhere_in_the_corpus_files():
     """A rate written as 12.5 would silently become a float on the money path."""
 
